@@ -71,18 +71,4 @@ UTF-8（BOM 無し）を推奨しますが、GUI 側で Shift_JIS などにも�
    - `3. 動画出力`：テンプレ背景にテキストを描画→音声と結合→concat→BGM 追加で `final.mp4` を作成。
 6. **成果物確認**：`slides`/`audio`/`frames`/`segments` などの生成物と `final.mp4` を確認します。
 
----
-
-## トラブルシュート
-- 文字化けする場合は Markdown/YAML を UTF-8 で保存し直す。
-- ffmpeg が見つからない場合はフルパスを指定する。
-- AivisSpeech が応答しない場合は Engine 側ログを確認し、必要なら `/initialize_speaker` を実行する（GUI のチェックボックスで可）。
-- BGM が短い場合でも `-stream_loop -1` で自動ループしますが、音量バランスは `movie_maker_gui.py` 内の `volume=0.2` を調整してください。
-
----
-
-## 次のステップ例
-1. `prompt.txt` に自社用語や注意事項を追記し、チーム用テンプレートを整備する。
-2. `test.css` をブランドカラーやフォントに合わせてカスタマイズする。
-3. Marp→PDF→GUI の実行をスクリプト化し、定例レポート動画を自動生成するパイプラインへ発展させる。
 
