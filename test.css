@@ -1,0 +1,174 @@
+/* MARP CYBERPUNK-INDIGO with Layout & Typography Fixes */
+
+/* ===== フォント読み込み ===== */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&family=Montserrat:wght@700&display=swap');
+
+/* ===== カラーパレット ===== */
+:root {
+  /* Cyberpunk Palette */
+  --bg-color: #0a0f2c; /* 深い藍色 */
+  --text-color: #e0e0e0; /* オフホワイト */
+  --accent-light: #00ffff; /* サイアン */
+  --accent: #ff00ff; /* マゼンタ */
+  --accent-dark: #8A2BE2; /* ブルーバイオレット */
+  --link-color: var(--accent-light);
+  --border-color: rgba(0, 255, 255, 0.5); /* 半透明のサイアン */
+  --code-bg: rgba(0, 255, 255, 0.1); /* 薄いサイアン背景 */
+  --code-color: #f0f0f0;
+  --subtle-text-color: #888899; /* グレー */
+  --pre-bg-color: #1a1f3c; /* 背景より少し明るい藍色 */
+
+  /* 調整用変数 */
+  --base-font-size: 36px; /* ★ 32px → 36px に拡大 */
+  --base-line-height: 1.55;
+  --padding-v: 40px;
+  --padding-h: 60px;
+}
+
+/* ===== セクション共通 ===== */
+section {
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: var(--base-font-size);
+  line-height: var(--base-line-height);
+  padding: var(--padding-v) var(--padding-h);
+  box-sizing: border-box;
+  text-align: left;
+  letter-spacing: 0.02em;
+  overflow-y: auto;
+}
+
+/* タイトルスライド */
+section.title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* ===== タイポグラフィ ===== */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Montserrat', sans-serif;
+  margin: 1.1em 0 0.6em; /* 少し間隔を広げる */
+  line-height: 1.3;
+  padding-bottom: 0.2em;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid var(--border-color);
+  text-shadow:none;
+}
+
+h1 { font-size: 1.9em; border-bottom-width: 3px; margin: 0.8em 0; color: #fff;} /* ★ 1.6em → 1.9em */
+h2 { font-size: 1.5em; color: var(--accent); margin: 0.6em 0; border: none; padding: 0; } /* ★ 1.3em → 1.5em */
+@supports ((-webkit-background-clip: text) and (-webkit-text-fill-color: transparent)) {
+  h2 { background: linear-gradient(90deg, var(--accent-light), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+}
+h3 { font-size: 1.3em; border-bottom-style: dotted; color: var(--accent-light); } /* ★ 1.2em → 1.3em */
+h4, h5, h6 { font-size: 1.1em; border: none; color: #c0c0c0; } /* ★ 少し拡大 */
+
+/* ===== テキストシャドウ ===== */
+section p, section li { text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+
+/* ===== リンク ===== */
+a { color: var(--link-color); text-decoration: none; font-weight: 600; transition: color 0.2s ease, text-shadow 0.2s ease; }
+a:hover { color: #fff; text-decoration: none; text-shadow: 0 0 8px var(--link-color), 0 0 12px var(--link-color); }
+
+/* ===== 段落 ===== */
+p { margin: 0.6em 0; font-size: 1.05em; } /* ★ 0.95em → 1.05em */
+
+/* ===== リスト ===== */
+ul, ol { margin: 0.6em 0 0.6em 1.2em; padding-left: 1em; }
+li { margin-bottom: 0.4em; font-size: 1.05em; } /* ★ 追加でやや拡大 */
+ul li::marker { color: var(--accent); font-size: 0.9em; text-shadow: 0 0 5px var(--accent); }
+ol { list-style-type: decimal; }
+
+/* ===== 引用 ===== */
+blockquote {
+  margin: 1.2em 0;
+  padding: 0.8em 1.2em;
+  border-left: 5px solid var(--accent);
+  background-color: rgba(138, 43, 226, 0.1); /* ブルーバイオレットの薄い背景 */
+  color: #d0d0d0;
+  box-shadow: inset 3px 0 15px rgba(255, 0, 255, 0.2);
+  font-size: 1.05em; /* ★ 読みやすく拡大 */
+}
+blockquote p { margin: 0.4em 0; font-style: normal; }
+
+/* ===== インラインコード ===== */
+code {
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+  background-color: var(--code-bg);
+  color: var(--code-color);
+  padding: 0.25em 0.45em;
+  border-radius: 4px;
+  font-size: 0.95em; /* ★ 少し拡大 */
+  word-wrap: break-word;
+  text-shadow: 0 0 3px var(--accent-light);
+}
+
+/* ===== コードブロック ===== */
+pre {
+  background-color: var(--pre-bg-color);
+  color: #f8f9fa;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1.1em;
+  margin: 1.2em 0;
+  overflow-x: auto;
+  line-height: 1.45;
+  font-size: 0.95em; /* ★ 0.85 → 0.95 */
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+pre code { background: transparent; color: inherit; padding: 0; border: none; text-shadow: none; }
+
+/* ===== 画像 ===== */
+img { max-width: 90%; max-height: 70vh; margin: 20px auto; display: block; border-radius: 6px; border: 1px solid var(--border-color); box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
+
+/* ===== 水平線 ===== */
+hr {
+  border: none;
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--accent), transparent);
+  margin: 2em 0;
+}
+
+/* ===== テーブル ===== */
+table { border-collapse: collapse; margin: 1em 0; width: 100%; font-size: 0.95em; box-shadow: 0 0 8px rgba(0,0,0,0.5); } /* ★ 0.85→0.95 */
+th, td { border: 1px solid var(--border-color); padding: 0.6em 0.9em; text-align: left; }
+th { background-color: rgba(0, 255, 255, 0.15); font-weight: 700; color: var(--accent-light); }
+tbody tr { background-color: rgba(255, 255, 255, 0.02); }
+tbody tr:nth-child(odd) { background-color: rgba(255, 255, 255, 0.05); }
+
+/* ===== フッター ===== */
+footer { position: absolute; bottom: 20px; left: var(--padding-h); width: calc(100% - calc(var(--padding-h) * 2)); font-size: 20px; color: var(--subtle-text-color); } /* ★ 18px → 20px */
+
+/* ===== ページ番号 ===== */
+section::after { content: attr(data-marpit-pagination); position: absolute; bottom: 10px; right: var(--padding-h); font-size: 18px; color: var(--subtle-text-color); } /* ★ 16px → 18px */
+
+/* ===== ハイライトスライド ===== */
+section.highlight { background-color: var(--accent-dark); color: #f8f9fa; overflow-y: auto; }
+section.highlight h1, section.highlight h2, section.highlight h3 { color: #fff; border-color: rgba(255,255,255,0.5); text-shadow: 0 0 8px #fff; }
+section.highlight a { color: #f8f9fa; }
+section.highlight code { background-color: rgba(255,255,255,0.2); color: #f8f9fa; }
+section.highlight blockquote { background-color: rgba(255,255,255,0.1); border-color: #fff; color: #f1f3f5; }
+section.highlight::after, section.highlight footer { color: rgba(255,255,255,0.7); }
+
+/* ===== カードコンポーネント ===== */
+.card { background: var(--pre-bg-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.3em; margin: 1em 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+/* ===== ２カラムリスト ===== */
+ul.split-columns { column-count: 2; column-gap: 1.5em; }
+
+/* ===== フェードインアニメーション ===== */
+section > * { opacity: 0; transform: translateY(15px); transition: opacity 0.6s ease, transform 0.6s ease; }
+section[data-marpit-pagination] > * { opacity: 1; transform: translateY(0); }
+
+/* ===== レスポンシブ調整 ===== */
+@media (max-height: 800px) {
+  section { font-size: 30px; padding: 30px; } /* ★ 小画面でも大きめに維持 */
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.3em; }
+  h3 { font-size: 1.1em; }
+}
