@@ -6,16 +6,17 @@ MovieMaker GUI tool
 This tkinter-based utility automates the workflow described in 仕様書.md:
 
 1. Convert PDF slides into 1280x720 PNG images that stay aligned with YAML ids.
-2. Split YAML scripts by "。" and synthesize narration with AivisSpeech Engine.
+2. Split YAML scripts by "?? and synthesize narration with AivisSpeech or Qwen3-TTS.
 3. Composite slides, notes, and subtitles on top of a 1920x1080 template and
    stitch everything into an mp4 video via ffmpeg while adding low-volume BGM.
 
 Prerequisites
 -------------
 - Python 3.9+
-- pip install pymupdf pillow pyyaml requests
+- pip install pymupdf pillow pyyaml requests gradio_client
 - ffmpeg available on PATH (or specify full path in the GUI)
 - AivisSpeech Engine running locally (default http://127.0.0.1:10101)
+- Qwen3-TTS Gradio app running locally (default http://127.0.0.1:8000)
 
 Fonts, background, and BGM default to the paths listed in the specification but
 can be overridden from the GUI.
@@ -57,6 +58,12 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 try:
+    from gradio_client import Client as GradioClient, handle_file as gradio_handle_file
+except ImportError:  # pragma: no cover
+    GradioClient = None  # type: ignore[assignment]
+    gradio_handle_file = None  # type: ignore[assignment]
+
+try:
     import yaml
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("PyYAML is required. Install it with: pip install pyyaml") from exc
@@ -82,6 +89,22 @@ DEFAULT_NOTE_FONT = Path(
     r"右側ノートのフォントパス"
 )
 DEFAULT_BGM = Path(r"(Glass Weather).mp3")
+TARGET_FPS = 30
+TARGET_AUDIO_SAMPLE_RATE = 48000
+
+QWEN_LANG_OPTIONS = [
+    "Auto",
+    "Chinese",
+    "English",
+    "German",
+    "Italian",
+    "Portuguese",
+    "Spanish",
+    "Japanese",
+    "Korean",
+    "French",
+    "Russian",
+]
 
 
 def ensure_directory(path: Path) -> Path:
@@ -313,6 +336,64 @@ class AivisSpeechClient:
         dest.write_bytes(synth_resp.content)
 
 
+class Qwen3TTSClient:
+    def __init__(self, base_url: str) -> None:
+        if GradioClient is None or gradio_handle_file is None:
+            raise RuntimeError(
+                "gradio_client is required for Qwen3-TTS. Install it with: pip install gradio_client"
+            )
+        self.base_url = base_url.rstrip("/")
+        self.client = GradioClient(self.base_url)
+        self.session = requests.Session()
+        self._lock = threading.Lock()
+
+    def _resolve_audio_bytes(self, audio_info) -> bytes:
+        url: Optional[str] = None
+        path: Optional[str] = None
+        if isinstance(audio_info, dict):
+            url = audio_info.get("url")
+            path = audio_info.get("path")
+        elif isinstance(audio_info, str):
+            path = audio_info
+        if path and Path(path).is_file():
+            return Path(path).read_bytes()
+        if url:
+            if url.startswith("/"):
+                url = f"{self.base_url}{url}"
+            resp = self.session.get(url, timeout=180)
+            resp.raise_for_status()
+            return resp.content
+        raise RuntimeError(f"Unable to resolve Qwen3-TTS audio output: {audio_info}")
+
+    def synthesize(
+        self,
+        ref_aud: Path,
+        ref_txt: str,
+        use_xvec: bool,
+        text: str,
+        lang_disp: str,
+        dest: Path,
+    ) -> None:
+        if not ref_aud.is_file():
+            raise FileNotFoundError(f"Reference audio not found: {ref_aud}")
+        if not use_xvec and not ref_txt.strip():
+            raise ValueError("Reference text is required unless x-vector mode is enabled.")
+
+        with self._lock:
+            result = self.client.predict(
+                ref_aud=gradio_handle_file(str(ref_aud)),
+                ref_txt=ref_txt,
+                use_xvec=use_xvec,
+                text=text,
+                lang_disp=lang_disp,
+                api_name="/run_voice_clone",
+            )
+        audio_info = result[0] if isinstance(result, (list, tuple)) else result
+        audio_bytes = self._resolve_audio_bytes(audio_info)
+        ensure_directory(dest.parent)
+        dest.write_bytes(audio_bytes)
+
+
 @dataclass
 class Segment:
     slide_id: int
@@ -353,7 +434,7 @@ class UILogger:
 class MovieMakerApp:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("MovieMaker GUI (AivisSpeech)")
+        self.root.title("MovieMaker GUI (AivisSpeech / Qwen3-TTS)")
         self.root.geometry("1150x780")
         self._manifest_cache: List[Segment] = []
 
@@ -381,8 +462,14 @@ class MovieMakerApp:
         self.note_font_var = tk.StringVar(value=str(DEFAULT_NOTE_FONT))
         self.bgm_var = tk.StringVar(value=str(DEFAULT_BGM))
         self.ffmpeg_var = tk.StringVar(value="ffmpeg")
+        self.tts_engine_var = tk.StringVar(value="AivisSpeech")
         self.aivis_url_var = tk.StringVar(value="http://127.0.0.1:10101")
         self.speaker_id_var = tk.StringVar(value="888753760")
+        self.qwen_url_var = tk.StringVar(value="http://127.0.0.1:8000")
+        self.qwen_ref_aud_var = tk.StringVar()
+        self.qwen_ref_txt_var = tk.StringVar()
+        self.qwen_use_xvec_var = tk.BooleanVar(value=False)
+        self.qwen_lang_var = tk.StringVar(value="Auto")
         self.worker_var = tk.IntVar(value=max(2, os.cpu_count() or 4))
         self.prewarm_var = tk.BooleanVar(value=True)
 
@@ -430,30 +517,101 @@ class MovieMakerApp:
             button_label="保存先",
         )
 
-        aivis = ttk.LabelFrame(container, text="AivisSpeech 設定")
-        aivis.pack(fill=tk.X, pady=(0, 10))
-        self._path_row(aivis, "Engine URL:", self.aivis_url_var, None, 0, browse=False)
+        tts = ttk.LabelFrame(container, text="TTS Settings")
+        tts.pack(fill=tk.X, pady=(0, 10))
+
+        engine_row = ttk.Frame(tts)
+        engine_row.grid(row=0, column=0, columnspan=3, sticky="we", pady=2)
+        ttk.Label(engine_row, text="Engine:").pack(side=tk.LEFT)
+        ttk.Combobox(
+            engine_row,
+            textvariable=self.tts_engine_var,
+            values=("AivisSpeech", "Qwen3-TTS"),
+            state="readonly",
+            width=16,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+
+        self.aivis_section = ttk.Frame(tts)
+        self.aivis_section.grid(row=1, column=0, columnspan=3, sticky="we")
         self._path_row(
-            aivis,
+            self.aivis_section,
+            "Aivis URL:",
+            self.aivis_url_var,
+            None,
+            0,
+            browse=False,
+        )
+        self._path_row(
+            self.aivis_section,
             "Speaker ID:",
             self.speaker_id_var,
             self._fetch_speakers,
             1,
-            button_label="話者一覧",
+            button_label="Pick",
         )
-        worker_row = ttk.Frame(aivis)
-        worker_row.grid(row=2, column=0, columnspan=3, sticky="we", pady=2)
-        ttk.Label(worker_row, text="並列ワーカー数:").pack(side=tk.LEFT)
+
+        self.qwen_section = ttk.Frame(tts)
+        self.qwen_section.grid(row=2, column=0, columnspan=3, sticky="we")
+        self._path_row(
+            self.qwen_section,
+            "Qwen URL:",
+            self.qwen_url_var,
+            None,
+            0,
+            browse=False,
+        )
+        self._path_row(
+            self.qwen_section,
+            "Reference audio:",
+            self.qwen_ref_aud_var,
+            lambda: self._choose_file(self.qwen_ref_aud_var),
+            1,
+            button_label="Browse",
+        )
+        self._path_row(
+            self.qwen_section,
+            "Reference text:",
+            self.qwen_ref_txt_var,
+            None,
+            2,
+            browse=False,
+        )
+        qwen_opts = ttk.Frame(self.qwen_section)
+        qwen_opts.grid(row=3, column=0, columnspan=3, sticky="we", pady=2)
+        ttk.Checkbutton(
+            qwen_opts, text="x-vector mode", variable=self.qwen_use_xvec_var
+        ).pack(side=tk.LEFT)
+        ttk.Label(qwen_opts, text="Language:").pack(side=tk.LEFT, padx=(12, 4))
+        ttk.Combobox(
+            qwen_opts,
+            textvariable=self.qwen_lang_var,
+            values=QWEN_LANG_OPTIONS,
+            state="readonly",
+            width=12,
+        ).pack(side=tk.LEFT)
+
+        worker_row = ttk.Frame(tts)
+        worker_row.grid(row=4, column=0, columnspan=3, sticky="we", pady=2)
+        ttk.Label(worker_row, text="Workers:").pack(side=tk.LEFT)
         ttk.Spinbox(
             worker_row,
             from_=1,
             to=max(32, (os.cpu_count() or 4) * 2),
             textvariable=self.worker_var,
             width=6,
-        ).pack(side=tk.LEFT, padx=(5, 20))
+        ).pack(side=tk.LEFT, padx=(6, 20))
         ttk.Checkbutton(
-            worker_row, text="事前に /initialize_speaker を叩く", variable=self.prewarm_var
+            worker_row,
+            text="Prewarm /initialize_speaker (Aivis only)",
+            variable=self.prewarm_var,
         ).pack(side=tk.LEFT)
+
+        self._tts_frames = {
+            "AivisSpeech": self.aivis_section,
+            "Qwen3-TTS": self.qwen_section,
+        }
+        self.tts_engine_var.trace_add("write", lambda *_: self._update_tts_sections())
+        self._update_tts_sections()
 
         video = ttk.LabelFrame(container, text="合成設定")
         video.pack(fill=tk.X, pady=(0, 10))
@@ -503,7 +661,7 @@ class MovieMakerApp:
 
     def _path_row(
         self,
-        parent: ttk.LabelFrame,
+        parent: ttk.Widget,
         label: str,
         var: tk.StringVar,
         callback,
@@ -525,6 +683,15 @@ class MovieMakerApp:
             ttk.Button(parent, text=button_label, command=lambda: self._choose_file(var)).grid(
                 row=row, column=2, padx=(6, 2), pady=2
             )
+
+    def _update_tts_sections(self) -> None:
+        frames = getattr(self, "_tts_frames", {})
+        selected = self.tts_engine_var.get()
+        for name, frame in frames.items():
+            if name == selected:
+                frame.grid()
+            else:
+                frame.grid_remove()
 
     def _progress_row(self, parent: ttk.Frame, label: str, var: tk.DoubleVar, row: int) -> None:
         ttk.Label(parent, text=label, width=10).grid(row=row, column=0, sticky="w")
@@ -723,14 +890,49 @@ class MovieMakerApp:
         if not segments:
             raise ValueError("音声化する script が見つかりません。")
 
-        client = AivisSpeechClient(self.aivis_url_var.get())
-        speaker_id = self.speaker_id_var.get().strip()
-        if self.prewarm_var.get():
-            self.log(f"/initialize_speaker を実行中... (speaker={speaker_id})")
-            client.initialize_speaker(speaker_id)
+        engine = (self.tts_engine_var.get() or "AivisSpeech").strip()
+        self.log(f"TTS engine: {engine}")
+
+        tts_settings: Dict[str, object] = {}
+        speaker_id = ""
+        qwen_ref_aud: Optional[Path] = None
+        qwen_ref_txt = ""
+        qwen_use_xvec = False
+        qwen_lang = "Auto"
+
+        if engine == "Qwen3-TTS":
+            ref_audio_value = self.qwen_ref_aud_var.get().strip()
+            if not ref_audio_value:
+                raise ValueError("Reference audio is required for Qwen3-TTS.")
+            qwen_ref_aud = Path(ref_audio_value)
+            if not qwen_ref_aud.is_file():
+                raise FileNotFoundError(f"Reference audio not found: {qwen_ref_aud}")
+            qwen_ref_txt = self.qwen_ref_txt_var.get()
+            qwen_use_xvec = bool(self.qwen_use_xvec_var.get())
+            qwen_lang = (self.qwen_lang_var.get() or "Auto").strip() or "Auto"
+            client = Qwen3TTSClient(self.qwen_url_var.get())
+            tts_settings = {
+                "engine_url": self.qwen_url_var.get(),
+                "reference_audio": str(qwen_ref_aud),
+                "reference_text": qwen_ref_txt,
+                "use_xvec": qwen_use_xvec,
+                "language": qwen_lang,
+            }
+        else:
+            engine = "AivisSpeech"
+            client = AivisSpeechClient(self.aivis_url_var.get())
+            speaker_id = self.speaker_id_var.get().strip()
+            if self.prewarm_var.get():
+                self.log(f"/initialize_speaker ... (speaker={speaker_id})")
+                client.initialize_speaker(speaker_id)
+            tts_settings = {
+                "engine_url": self.aivis_url_var.get(),
+                "speaker_id": speaker_id,
+                "prewarm": bool(self.prewarm_var.get()),
+            }
 
         total = len(segments)
-        self.log(f"音声合成ジョブ: {total} 件")
+        self.log(f"Audio jobs: {total} (engine={engine})")
         workers = max(1, int(self.worker_var.get()))
         completed = 0
         lock = threading.Lock()
@@ -738,8 +940,19 @@ class MovieMakerApp:
         def synthesize(segment: Segment) -> None:
             if Path(segment.audio_path).is_file():
                 return
-            client.synthesize(speaker_id, segment.script_text, Path(segment.audio_path))
-
+            dest = Path(segment.audio_path)
+            if engine == "Qwen3-TTS":
+                assert qwen_ref_aud is not None
+                client.synthesize(
+                    qwen_ref_aud,
+                    qwen_ref_txt,
+                    qwen_use_xvec,
+                    segment.script_text,
+                    qwen_lang,
+                    dest,
+                )
+            else:
+                client.synthesize(speaker_id, segment.script_text, dest)
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             future_map = {executor.submit(synthesize, seg): seg for seg in segments}
             for future in concurrent.futures.as_completed(future_map):
@@ -758,6 +971,8 @@ class MovieMakerApp:
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "pdf": self.pdf_var.get(),
             "yaml": self.yaml_var.get(),
+            "tts_engine": engine,
+            "tts_settings": tts_settings,
             "segments": [segment.__dict__ for segment in segments],
         }
         manifest_path.write_text(
@@ -807,10 +1022,16 @@ class MovieMakerApp:
                     "-y",
                     "-loop",
                     "1",
+                    "-framerate",
+                    str(TARGET_FPS),
                     "-i",
                     str(frame_path),
                     "-i",
                     segment.audio_path,
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
                     "-c:v",
                     "libx264",
                     "-tune",
@@ -823,9 +1044,19 @@ class MovieMakerApp:
                     "aac",
                     "-b:a",
                     "192k",
+                    "-ar",
+                    str(TARGET_AUDIO_SAMPLE_RATE),
+                    "-af",
+                    "aresample=async=1:first_pts=0",
+                    "-vsync",
+                    "cfr",
+                    "-r",
+                    str(TARGET_FPS),
                     "-shortest",
                     "-pix_fmt",
                     "yuv420p",
+                    "-movflags",
+                    "+faststart",
                     str(video_path),
                 ]
             )
@@ -847,10 +1078,36 @@ class MovieMakerApp:
                 "concat",
                 "-safe",
                 "0",
+                "-fflags",
+                "+genpts",
                 "-i",
                 str(concat_list),
-                "-c",
-                "copy",
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-vsync",
+                "cfr",
+                "-r",
+                str(TARGET_FPS),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-ar",
+                str(TARGET_AUDIO_SAMPLE_RATE),
+                "-af",
+                "aresample=async=1:first_pts=0",
+                "-movflags",
+                "+faststart",
                 str(narrator_only),
             ]
         )
@@ -871,15 +1128,23 @@ class MovieMakerApp:
                 "-i",
                 str(bgm_path),
                 "-filter_complex",
-                "[1:a]volume=0.2[a_bgm];[0:a][a_bgm]amix=inputs=2:duration=first[a_mix]",
+                f"[1:a]aresample={TARGET_AUDIO_SAMPLE_RATE},volume=0.2[a_bgm];"
+                "[0:a][a_bgm]amix=inputs=2:duration=first:dropout_transition=2,"
+                "aresample=async=1:first_pts=0[a_mix]",
                 "-map",
-                "0:v",
+                "0:v:0",
                 "-map",
                 "[a_mix]",
                 "-c:v",
                 "copy",
                 "-c:a",
                 "aac",
+                "-b:a",
+                "192k",
+                "-ar",
+                str(TARGET_AUDIO_SAMPLE_RATE),
+                "-movflags",
+                "+faststart",
                 "-shortest",
                 str(final_output),
             ]
@@ -910,6 +1175,13 @@ class MovieMakerApp:
 
     # ---------- speaker picker ----------
     def _fetch_speakers(self) -> None:
+        if self.tts_engine_var.get() != "AivisSpeech":
+            messagebox.showinfo(
+                "Speaker picker",
+                "Switch engine to AivisSpeech to list speakers.",
+            )
+            return
+
         def worker() -> None:
             try:
                 client = AivisSpeechClient(self.aivis_url_var.get())
