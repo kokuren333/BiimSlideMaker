@@ -9,9 +9,9 @@ This project adapts those functional zones to an explainer canvas: main slide at
 ## Writing for the regions
 
 - **Main slide**: show the current claim, object, comparison, diagram, or evidence. Make the visual useful even when viewed briefly; avoid duplicating every narration sentence as slide text.
-- **Right notes**: `note_top` is a short label or current point. `note_bottom` contains supporting details, definitions, caveats, or a compact sequence. Prefer fragments and short bullets to a dense essay.
-- **Bottom subtitle**: `script` is spoken narration and also the synchronized subtitle. Each sentence is a separate audio/video segment. Keep sentences concise enough to fit the reduced width to the right of the avatar; split long thoughts into natural sentences rather than shrinking all text.
-- **Lower-left avatar**: reserve x=35..285 and y=795..1045 at the default 1920x1080 canvas. The subtitle begins at x=330. Pick gestures that support the spoken intent; idle is appropriate for neutral explanation.
+- **Right notes**: use the top quarter of the frame for a short, larger bold `note_top` heading and the lower three quarters for left-aligned `note_bottom` context, separated by visible breathing room. Give the lower note enough substance to explain background, reasoning, an example, or a caveat, usually 2–4 concise sentences (around 60–140 Japanese characters). Avoid repeating the slide or narration verbatim and avoid filler.
+- **Bottom subtitle**: `script` is spoken narration and the synchronized subtitle. Each sentence is an audio/video segment split at Japanese and ASCII sentence punctuation. Keep sentences clear and natural; the renderer shrinks the bold text to fit and wraps as a fallback.
+- **Lower-left avatar**: reserve x=35..335 and y=755..1055 at the default 1920×1080 canvas. The subtitle begins at x=385. Pick gestures that support the spoken intent; idle is appropriate for neutral explanation.
 - **Hierarchy**: let the main visual dominate, make note labels scannable, and make the current spoken line legible. Keep labels, notes, and narration semantically distinct rather than repeating the same paragraph in all three places.
 - **Adaptation**: Biim layouts vary. Preserve the functional separation of primary content, supporting explanation, spoken text, and character while tuning sizes to the story and supplied background. Do not force a classic RTA/gameplay look when a modern or calmer design better fits the user's topic.
 
