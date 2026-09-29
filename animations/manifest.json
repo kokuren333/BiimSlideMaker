@@ -1,0 +1,56 @@
+{
+  "character": "kokuren",
+  "source": "keyframes/*.png",
+  "keyframesPerAction": 6,
+  "size": 256,
+  "fps": 12,
+  "frames": 24,
+  "columns": 6,
+  "rows": 4,
+  "duration": 2,
+  "loop": true,
+  "alpha": true,
+  "safeMargin": 36,
+  "actions": {
+    "idle": {
+      "label": "待つ",
+      "sheet": "idle.png",
+      "preview": "idle.gif"
+    },
+    "wave": {
+      "label": "翼を振る",
+      "sheet": "wave.png",
+      "preview": "wave.gif"
+    },
+    "nod": {
+      "label": "うなずく",
+      "sheet": "nod.png",
+      "preview": "nod.gif"
+    },
+    "think": {
+      "label": "考える",
+      "sheet": "think.png",
+      "preview": "think.gif"
+    },
+    "point": {
+      "label": "翼で説明",
+      "sheet": "point.png",
+      "preview": "point.gif"
+    },
+    "cheer": {
+      "label": "喜ぶ",
+      "sheet": "cheer.png",
+      "preview": "cheer.gif"
+    },
+    "walk": {
+      "label": "羽ばたいて移動",
+      "sheet": "walk.png",
+      "preview": "walk.gif"
+    },
+    "surprise": {
+      "label": "驚く",
+      "sheet": "surprise.png",
+      "preview": "surprise.gif"
+    }
+  }
+}

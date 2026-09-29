@@ -3,6 +3,8 @@ slides:
     script: |
       皆様、こんにちは。本日は BiimSlideMaker のデモンストレーションをご覧いただきありがとうございます。
       このツールは、Markdown から動画を手軽に作成することを目的としています。
+    # motions は script を句点で分割した順に対応。省略した発話は idle。
+    motions: [wave, nod]
     note_top: ここは要点や要約を記載する
     note_bottom: |
       このエリアにもYAMLから文章を表示させることができます。追加事項やスライドの概要を表示するといいでしょう。

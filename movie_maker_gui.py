@@ -76,7 +76,7 @@ CANVAS_SIZE = (1920, 1080)
 SLIDE_SIZE = (1280, 720)
 SLIDE_TOP_LEFT = (40, 28)
 SLIDE_CORNER_RADIUS = 32
-SCRIPT_BOX = (88, 847, 1850, 1009)
+SCRIPT_BOX = (330, 847, 1850, 1009)
 NOTE_BOX = (1413, 66, 1857, 721)
 SCRIPT_COLOR = (255, 255, 255)
 NOTE_COLOR = (238, 244, 255)
@@ -89,6 +89,10 @@ DEFAULT_NOTE_FONT = Path(
     r"右側ノートのフォントパス"
 )
 DEFAULT_BGM = Path(r"(Glass Weather).mp3")
+DEFAULT_ANIMATIONS = Path(__file__).resolve().parent / "animations"
+CHARACTER_ACTIONS = {"idle", "wave", "nod", "think", "point", "cheer", "walk", "surprise"}
+CHARACTER_POSITION = (35, 795)
+CHARACTER_SIZE = 250
 TARGET_FPS = 30
 TARGET_AUDIO_SAMPLE_RATE = 48000
 
@@ -403,6 +407,7 @@ class Segment:
     note_bottom: str
     slide_image: str
     audio_path: str
+    motion: str = "idle"
 
     @property
     def chunk_name(self) -> str:
@@ -464,7 +469,7 @@ class MovieMakerApp:
         self.ffmpeg_var = tk.StringVar(value="ffmpeg")
         self.tts_engine_var = tk.StringVar(value="AivisSpeech")
         self.aivis_url_var = tk.StringVar(value="http://127.0.0.1:10101")
-        self.speaker_id_var = tk.StringVar(value="888753760")
+        self.speaker_id_var = tk.StringVar(value="1069147200")
         self.qwen_url_var = tk.StringVar(value="http://127.0.0.1:8000")
         self.qwen_ref_aud_var = tk.StringVar()
         self.qwen_ref_txt_var = tk.StringVar()
@@ -869,6 +874,12 @@ class MovieMakerApp:
             script = slide.get("script", "")
             note = slide.get("note_bottom", "")
             sentences = split_script(script)
+            motions = slide.get("motions", []) or []
+            if not isinstance(motions, list):
+                raise ValueError(f"slides[{slide_id}].motions must be a list of action names")
+            unknown = set(str(action) for action in motions) - CHARACTER_ACTIONS
+            if unknown:
+                raise ValueError(f"Unknown character action(s) on slide {slide_id}: {', '.join(sorted(unknown))}")
             for idx, sentence in enumerate(sentences, start=1):
                 audio_path = audio_dir / f"chunk_{slide_id:03d}_{idx:02d}.wav"
                 segment = Segment(
@@ -879,6 +890,7 @@ class MovieMakerApp:
                     note_bottom=str(note or ""),
                     slide_image=str(slide_images.get(slide_id, "")),
                     audio_path=str(audio_path),
+                    motion=str(motions[idx - 1]) if idx <= len(motions) else "idle",
                 )
                 if not segment.slide_image:
                     raise FileNotFoundError(
@@ -1005,6 +1017,9 @@ class MovieMakerApp:
             chunk = segment.chunk_name
             frame_path = frame_dir / f"{chunk}.png"
             video_path = segment_dir / f"{chunk}.mp4"
+            animation_path = DEFAULT_ANIMATIONS / f"{segment.motion}.gif"
+            if not animation_path.is_file():
+                raise FileNotFoundError(f"キャラクターアニメーションが見つかりません: {animation_path}")
             compose_frame(
                 slide_path=Path(segment.slide_image),
                 background_path=background,
@@ -1026,16 +1041,21 @@ class MovieMakerApp:
                     str(TARGET_FPS),
                     "-i",
                     str(frame_path),
+                    "-stream_loop",
+                    "-1",
+                    "-i",
+                    str(animation_path),
                     "-i",
                     segment.audio_path,
+                    "-filter_complex",
+                    f"[1:v]scale={CHARACTER_SIZE}:{CHARACTER_SIZE}:force_original_aspect_ratio=decrease[char];"
+                    f"[0:v][char]overlay={CHARACTER_POSITION[0]}:{CHARACTER_POSITION[1]}:eof_action=repeat[v]",
                     "-map",
-                    "0:v:0",
+                    "[v]",
                     "-map",
-                    "1:a:0",
+                    "2:a:0",
                     "-c:v",
                     "libx264",
-                    "-tune",
-                    "stillimage",
                     "-preset",
                     "medium",
                     "-crf",
@@ -1166,6 +1186,7 @@ class MovieMakerApp:
                 note_bottom=seg.get("note_bottom", ""),
                 slide_image=seg["slide_image"],
                 audio_path=seg["audio_path"],
+                motion=seg.get("motion", "idle"),
             )
             for idx, seg in enumerate(data.get("segments", []))
         ]

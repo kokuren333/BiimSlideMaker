@@ -1,74 +1,100 @@
-﻿# BiimSlideMaker MovieMaker GUI
+# BiimSlideMaker
 
-BiimSlideMaker MovieMaker GUI は、Markdown/Marp で作成したスライドと YAML 台本を、AivisSpeech と ffmpeg を介して 1920x1080 の解説動画へ一気通貫で変換するための Tkinter 製ツールです。PDF→PNG 変換、音声合成、BGM ミックス付きの映像書き出しまでを 3 ステップで完了できます。
+Agent-first toolkit for authoring editable 16:9 narrated videos. Give the Agent a topic and creative brief; it creates the project files directly, validates them, and renders an upload-ready MP4 through the local CLI. No Marp, GUI prompt transfer, or Gemini web workflow is required.
 
----
+## Agent workflow
 
-## リポジトリ構成
-| パス | 役割 |
-| --- | --- |
-| `movie_maker_gui.py` | GUI 本体。PDF 変換、AivisSpeech 連携、ffmpeg による結合処理を実装。 |
-| `prompt.txt` | LLM（Gemini 推奨）に与えるシステムプロンプト例。テーマや目標枚数を追記して利用する。 |
-| `test.md` / `test.css` / `test.pdf` | Marp スライドのサンプル。`test.md` に `test.css` を適用して PDF 化した結果が `test.pdf`。 |
-| `test.yaml` | YAML 台本サンプル。`slides` 配列で `id`／`script`／`note_top`／`note_bottom` を紐づける。 |
-| `biimslide_1920x1080.png` | 既定の 1920x1080 背景画像。 |
-| `(Glass Weather).mp3` | 既定の BGM。GUI の「BGM」欄で参照される。 |
+At the start of a new video, the Agent checks for any missing details:
 
----
+- Topic and intended audience
+- Approximate video duration or slide count
+- Preferred visual design
+- Reference sources, files, or URLs
+- Special requirements, required points, or topics to avoid
 
-## 想定ワークフロー
-1. Gemini などの LLM に `prompt.txt` をシステムプロンプトとして貼り付け、スライド化したい内容と目標枚数を指示する。
-2. 返ってきた Markdown を `test.md` のように保存し、必要なら CSS（`test.css`）を調整する。
-3. Marp で PDF を生成する。例：`marp test.md --theme ./test.css --pdf`
-4. 同時に出力された YAML 台本（例: `test.yaml`）の `slides[].id` を PDF のページ番号と対応させる。
-5. AivisSpeech Engine を起動し、ffmpeg のパスが通った状態で `python movie_maker_gui.py` を実行する。
-6. GUI の「1. スライド生成」→「2. 音声合成」→「3. 動画出力」または「一括実行」で `final.mp4` を得る。
+It then creates and edits project files in the workspace. The repository's [`AGENTS.md`](AGENTS.md) gives project instructions. [`skills/biim-video/SKILL.md`](skills/biim-video/SKILL.md) explains the video workflow and links to the project schema and researched Biim layout guide.
 
----
+## Requirements
 
-## 前提条件とセットアップ
-- **Python 3.9+**：依存ライブラリをインストールします。
-  ```powershell
-  pip install -r requirements.txt
-  ```
-- **Marp CLI（PDF 化が前提）**：`marp test.md --theme ./test.css --pdf`
-- **AivisSpeech Engine が起動していること**：既定で `http://127.0.0.1:10101` にアクセスします。`/speakers` が返る状態を確認してください。
-- **ffmpeg のパスが通っていること**：`ffmpeg -version` で確認し、通っていない場合は GUI の「ffmpeg 実行ファイル」にフルパスを設定します。
-- **フォント・背景・BGM**：字幕用／ノート用フォント、背景 PNG、BGM を GUI で差し替え可能です。既定値はリポジトリの同名ファイルを参照します。
+- Python 3.10+
+- FFmpeg on `PATH`
+- AivisSpeech Engine running locally at `http://127.0.0.1:10101` for narration synthesis
+- Install Python libraries:
 
----
+```powershell
+python -m pip install -r requirements.txt
+```
 
-## Gemini（長文コンテキスト）を使ったスライド原稿作成
-1. Gemini Advanced などの長文コンテキスト対応モデルを開く。
-2. システムプロンプト欄に `prompt.txt` の全文を貼り付ける。
-3. ユーザープロンプトで「スライド化したい内容」「目標スライド枚数」「必ず伝えたいポイント」を指示する。
-4. 出力された Markdown／YAML を必要に応じて修正し、Marp 用 Markdown と `slides` 配列を整える。
-5. 追加修正（ノート追記、語尾調整など）が必要な場合は、同じコンテキストで Gemini に追い指示する。
+## Start a project
 
----
+```powershell
+python biim_cli.py init projects/my-video
+```
 
-## YAML 台本フォーマット
-`test.yaml` と同様に、最上位キーは `slides` です。
-| キー | 説明 |
-| --- | --- |
-| `id` | 1 から始まるスライド番号。PDF のページ番号と一致させる。 |
-| `script` | ナレーション本文。GUI 内で句読点ごとに分割され、AivisSpeech で音声化される。 |
-| `note_top` | 右上ノート枠に表示する短い要点。 |
-| `note_bottom` | 右下ノート枠に表示する詳細メモ。複数行は `|`（リテラルブロック）で記述する。 |
+The initializer creates `project.yaml`, a sample SVG slide, the default frame, and all character animation GIFs under the project. Edit `project.yaml` and the slide assets directly, or replace the SVG with PNG, JPEG, or WebP artwork.
 
-UTF-8（BOM 無し）を推奨しますが、GUI 側で Shift_JIS などにも自動フォールバックします。
+Check the project before synthesis:
 
----
+```powershell
+python biim_cli.py validate projects/my-video
+```
 
-## MovieMaker GUI の使い方
-1. **起動**：`python movie_maker_gui.py`
-2. **入力**：PDF と YAML を指定し、出力ディレクトリ／マニフェスト／最終 MP4 の保存先を設定します。
-3. **AivisSpeech**：Engine URL・Speaker ID・並列ワーカー数を設定し、「話者一覧」で `/speakers` の結果から ID を選択できます。
-4. **合成素材**：背景 PNG、字幕フォント、ノートフォント、BGM、ffmpeg 実行ファイルを必要に応じて変更します。
-5. **処理**：
-   - `1. スライド生成`：PDF を 1280x720 PNG に書き出し。
-   - `2. 音声合成`：`script` を分割して WAV 化し、マニフェストに記録。
-   - `3. 動画出力`：テンプレ背景にテキストを描画→音声と結合→concat→BGM 追加で `final.mp4` を作成。
-6. **成果物確認**：`slides`/`audio`/`frames`/`segments` などの生成物と `final.mp4` を確認します。
+Render the video (AivisSpeech Engine and FFmpeg must be available):
 
+```powershell
+python biim_cli.py build projects/my-video
+```
 
+By default the final file is `projects/my-video/output/final.mp4`. Intermediate frames, speech WAVs, and sentence-length video segments are kept in `output/final_work/` so the Agent can revise or inspect individual parts. Speech cache names include a fingerprint of the synthesis text and voice settings.
+
+## Project format
+
+Each project is a directory with a `project.yaml` manifest and editable slide assets. YAML is used for metadata and narration; slide artwork may use SVG, PNG, JPEG, or WebP. SVG is a convenient text format for Agent-authored diagrams and layouts, but Marp and Markdown slides are not required. The frame, layout boxes, font sizes, voice, soundtrack, and output location can be configured per project.
+
+The default manifest uses this core structure:
+
+```yaml
+version: 1
+title: Example video
+canvas: {width: 1920, height: 1080}
+fps: 30
+output: output/final.mp4
+assets:
+  background: assets/frame.png
+  animations: assets/animations
+  bgm: ""
+voice:
+  name: kokuren_3rd
+  speaker_uuid: 38d7216c-e595-4d8f-b06c-1fc376e47c0a
+  style_name: ノーマル
+  style_id: 1069147200
+  engine_url: http://127.0.0.1:10101
+slides:
+  - id: 1
+    image: slides/001.svg
+    script: |
+      こんにちは。
+      AivisSpeech APIを使います。
+    motions: [wave, point]
+    tts_texts: ["", "エイビススピーチ エーピーアイを使います。"]
+    note_top: 要点
+    note_bottom: 補足説明
+```
+
+`script` is split at `。！？!?`; each sentence gets one audio/video segment and one `motions` entry. Motion names are `idle`, `wave`, `nod`, `think`, `point`, `cheer`, `walk`, and `surprise`. Omitted motion entries default to `idle`. Optional `tts_texts` entries override only the text sent to speech synthesis; the subtitle remains the original `script`. Leave an entry empty to use the script as-is. The `aivis-pronunciation` skill guides selective readings for hard-to-pronounce kanji and English. See [`skills/biim-video/references/project-schema.md`](skills/biim-video/references/project-schema.md) for all fields.
+
+## Layout and output
+
+The default frame follows Biim's functional layout: primary visual at upper left, supplementary explanation at right, spoken subtitle along the bottom, and character at lower left. The character occupies roughly x=35–285; subtitles start at x=330 so they do not overlap. The `layout` fields in `project.yaml` can be tuned for alternate backgrounds and content. Boxes use `[x, y, width, height]` and scale from the 1920×1080 defaults for other 16:9 canvases; validation rejects subtitle-character overlaps.
+
+Default output is 1920×1080, 16:9, 30 fps, H.264 video (CRF 18), AAC audio (192 kbps, 48 kHz), `yuv420p`, and MP4 faststart. BGM is optional and mixed beneath narration. These broadly compatible settings are suitable for common video platforms.
+
+The default AivisSpeech voice is `kokuren_3rd` (UUID `38d7216c-e595-4d8f-b06c-1fc376e47c0a`), style `ノーマル`, ID `1069147200`. The CLI passes the style ID as the Engine API's `speaker` parameter. The UUID and name remain in the manifest as model metadata. The local model must be installed in AivisSpeech Engine.
+
+## Legacy GUI
+
+`movie_maker_gui.py` remains available for existing PDF plus YAML projects. It is a legacy compatibility workflow; new Agent-authored projects should use `biim_cli.py`.
+
+## Biim references
+
+The design notes in [`skills/biim-video/references/biim-conventions.md`](skills/biim-video/references/biim-conventions.md) are based on [biim's interview about the system's origin](https://denfaminicogamer.jp/interview/190514c) and a [community overview](https://w.atwiki.jp/cookie_kaisetu/pages/552.html). The layout guide treats the original as a practical information hierarchy and adapts it to the user's Kokuren character and content.
