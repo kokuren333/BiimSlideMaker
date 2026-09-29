@@ -2,4 +2,3 @@ requests
 pyyaml
 pymupdf
 pillow
-cairosvg

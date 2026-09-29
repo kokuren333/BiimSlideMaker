@@ -19,17 +19,18 @@ Usually leave ordinary kanji, common loanwords, numbers with obvious context, an
 - Avoid inserting spaces between ordinary Japanese words. A small boundary before an English-derived term can help, but keep phrasing natural.
 - Do not guess a person's or product's pronunciation from kanji/letters alone. Leave the display text unchanged and report the unresolved reading in project notes if no dependable source is available.
 
-## YAML mapping
+## JSON mapping
 
 The list index corresponds to each sentence in `script` after splitting at `。！？!?`. Empty strings mean “send the original subtitle to TTS.” For example:
 
-```yaml
-script: |
-  AivisSpeech APIで音声を作ります。
-  UUIDを設定します。
-tts_texts:
-  - エイビススピーチ エーピーアイで音声を作ります。
-  - ユーユーアイディーを設定します。
+```json
+{
+  "script": "AivisSpeech APIで音声を作ります。UUIDを設定します。",
+  "tts_texts": [
+    "エイビススピーチ エーピーアイで音声を作ります。",
+    "ユーユーアイディーを設定します。"
+  ]
+}
 ```
 
-The user-facing captions still show the original English and acronym. Only synthesis receives the katakana forms. Do not place YAML `null` or a nested text object in the list; use strings, and use `""` to fall back to the original.
+The user-facing captions still show the original English and acronym. Only synthesis receives the katakana forms. Use strings in the list and `""` to fall back to the original.

@@ -15,10 +15,10 @@ Before creating a new video, ask together for any missing essentials: topic and 
 
 ## Build an editable project
 
-- Create a project directory with `python biim_cli.py init <project-dir>`.
-- Keep the project editable by authoring `project.yaml` and slide assets directly. Do not route prompts or scripts through a GUI or an external LLM interface.
-- Use SVG, PNG, JPEG, or WebP per-slide artwork. Build custom layouts in the slide artwork and keep each source at 16:9; the renderer places it in the main frame. Marp is optional and not required.
-- Write the displayed subtitle and narration in `slides[].script`. `biim_cli.py` splits it at Japanese sentence punctuation (`。！？!?`); provide a `motions` entry per spoken sentence only when an expressive gesture is useful. The default is `idle`.
+- Create a project directory with `.\biim-video.ps1 init <project-dir>`.
+- Keep the project editable by authoring `project.json` and slide assets directly. Do not route prompts or scripts through a GUI or an external LLM interface.
+- Use PNG, JPEG, BMP, or GIF per-slide artwork. Build custom layouts in the slide artwork and keep each source at 16:9; the renderer places it in the main frame. Marp is optional and not required.
+- Write the displayed subtitle and narration in `slides[].script`. `biim-video.ps1` splits it at Japanese sentence punctuation (`。！？!?`); provide a `motions` entry per spoken sentence only when an expressive gesture is useful. The default is `idle`.
 - Preserve the subtitle exactly in `script`. If AivisSpeech may misread a particular term, keep the spoken rendering in the matching `tts_texts` entry; do not rewrite the visible caption to match phonetic spelling.
 - Give each frame a concise `note_top` heading and useful `note_bottom` explanation. Keep facts and source links in the project notes or visible notes when needed.
 - Choose motion with intent: `wave` for greeting, `nod` for agreement or confirmation, `think` for consideration, `point` for explanation or emphasis, `cheer` for a positive result, `surprise` for a genuine surprise, and `walk` only when movement is called for. Avoid changing motion every sentence without a reason.
@@ -28,6 +28,6 @@ Before creating a new video, ask together for any missing essentials: topic and 
 
 ## Validate and deliver
 
-1. Run `python biim_cli.py validate <project-dir>` and fix all errors.
-2. When the local AivisSpeech Engine and ffmpeg are available, run `python biim_cli.py build <project-dir>` to create the MP4. Build also writes generated frames, WAVs, and segment videos under `<output-stem>_work/` for review.
+1. Run `.\biim-video.ps1 validate <project-dir>` and fix all errors.
+2. When the local AivisSpeech Engine and ffmpeg are available, run `.\biim-video.ps1 build <project-dir>` to create the MP4. Build also writes generated frames, WAVs, and segment videos under `<output-stem>_work/` for review.
 3. Summarize the project path, output path, the validation/build performed, and any unavailable local service that prevented rendering.

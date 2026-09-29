@@ -21,18 +21,18 @@
 - 既存ツールが要求を満たさない場合は、必要な制作コードやCLIもリポジトリ内に実装し、Agentがコマンドで再生成・書き出しできる形にする。GUIへの手作業の貼り付けを制作工程の前提にしない。
 - 素材の場所、生成物、実行コマンド、編集方法をREADMEまたはプロジェクトの説明ファイルに記録する。
 - 依頼に不足があっても、独立して進められる調査や土台作りを進める。成果物の方向を大きく左右する未回答事項だけ確認する。
-- 動画制作ではまず `skills/biim-video/SKILL.md` を読み、`python biim_cli.py init <project-dir>` でプロジェクトを作る。台本・画像・設定を直接編集し、`python biim_cli.py validate <project-dir>` で検証する。投稿用動画は `python biim_cli.py build <project-dir>` で生成する。
+- 動画制作ではまず `skills/biim-video/SKILL.md` を読み、`.\biim-video.ps1 init <project-dir>` でプロジェクトを作る。台本・画像・設定を直接編集し、`.\biim-video.ps1 validate <project-dir>` で検証する。投稿用動画は `.\biim-video.ps1 build <project-dir>` で生成する。PowerShell 5.1+がWindowsに組み込みであるため、CLI利用者にPythonやpipの導入を求めない。
 
 ## 動画・画面の既定要件
 
 - 画面比率は16:9。動画の既定出力は1920×1080、30fps、H.264/AAC、`yuv420p`、MP4 faststartとし、一般的な動画投稿サービスで扱える設定を維持する。
 - Biim枠を使う場合、左下のキャラクター領域を確保し、字幕の表示幅を調整してキャラクターと字幕が重ならないようにする。
 - 既定キャラクター素材はリポジトリ内の `animations/`。`manifest.json` に記載されたアクションと透過素材を参照する。素材パスはプロジェクト位置から解決し、特定ユーザーの絶対パスに依存させない。
-- YAML台本の `motions` は `script` を句点で分割した発話順の動作リスト。Agentは発話の意味に応じて `wave`（挨拶）、`nod`（同意・確認）、`think`（検討）、`point`（説明・強調）、`cheer`（達成・歓迎）、`surprise`（驚き）などを控えめに割り当てる。明確な動作意図がない発話は `idle` とし、省略時も `idle` にする。`walk` は移動の演出が必要な場合に限る。
+- JSON台本の `motions` は `script` を句点で分割した発話順の動作リスト。Agentは発話の意味に応じて `wave`（挨拶）、`nod`（同意・確認）、`think`（検討）、`point`（説明・強調）、`cheer`（達成・歓迎）、`surprise`（驚き）などを控えめに割り当てる。明確な動作意図がない発話は `idle` とし、省略時も `idle` にする。`walk` は移動の演出が必要な場合に限る。
 - 表示字幕は `script` に正確に残す。AivisSpeechが誤読しそうな漢字・英語だけを `skills/aivis-pronunciation/SKILL.md` に従ってカタカナに置換し、発話ごとの `tts_texts` で合成入力を上書きする。通常語は変換しない。
 - 既定の音声話者は `kokuren_3rd`、speaker UUID `38d7216c-e595-4d8f-b06c-1fc376e47c0a`、スタイル「ノーマル」ID `1069147200`。音声合成は利用可能なローカルCLI/APIに接続し、Agentから実行できる形にする。
 - 静止画スライドでよい。動きを加える場合も、完成動画の解像度・フレームレート・音声同期を保つ。
 
 ## 現在の実装に関する注意
 
-`movie_maker_gui.py` は従来のPDFスライドとYAML台本用Tkinter GUIとして残す。新しいAgent主導の制作では `biim_cli.py` とプロジェクトYAMLを使い、GUIや外部LLMの画面への貼り付けを必要としない。
+`movie_maker_gui.py` は従来のPDFスライドとYAML台本用Tkinter GUIとして残す。新しいAgent主導の制作では `biim-video.ps1` とプロジェクトJSONを使い、GUIや外部LLMの画面への貼り付けを必要としない。
