@@ -14,7 +14,7 @@ The Agent-facing CLI reads `project.json`. Author each slide as a standalone HTM
   "assets": {
     "background": "assets/frame.svg",
     "animations": "assets/animations",
-    "bgm": ""
+    "bgm": "assets/bgm.mp3"
   },
   "voice": {
     "name": "kokuren_3rd",
@@ -102,3 +102,5 @@ Video output remains H.264/AAC, 1920×1080 at 30 fps by default, `yuv420p`, and 
 Preview a selected range by array position: `preview projects/my-video -PreviewFrom 14 -PreviewTo 18`. Generated frame HTML beside each preview is an inspectable rendering artifact; edit project.json and slide HTML as the source of truth.
 
 Default background is the bundled editable geometric `assets/frame-default.svg`, copied as `assets/frame.svg`. `init ... -FrameImage <path>` accepts SVG, PNG, JPEG, BMP or GIF and preserves the source extension. Frame coordinates and colors are editable in SVG; layout boxes are configured separately in project.json.
+
+Init copies the existing `(Glass Weather).mp3` as `assets/bgm.mp3` by default. `-BgmFile <path>` selects another audio file; `-NoBgm` leaves `assets.bgm` empty. Build repeats the music until the video ends, with `audio.bgm_volume` defaulting to 0.2. Existing projects retain their settings; set `assets.bgm` to a local relative audio path to enable music.

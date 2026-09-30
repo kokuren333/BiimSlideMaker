@@ -48,4 +48,6 @@
 
 ## 現在の実装に関する注意
 
+新規プロジェクトのBGMは `init` が既存の `(Glass Weather).mp3` をコピーして設定する。`build` は動画の最後までループする。差し替えには `-BgmFile <path>`、明示的にBGMを使わない場合だけ `-NoBgm` を使う。既存プロジェクトもBGMの希望があれば `assets.bgm` を設定し、音源をプロジェクト内へコピーする。外部音源を新たにコミットする際は再配布条件を確認する。
+
 `movie_maker_gui.py` は従来のPDFスライドとYAML台本用Tkinter GUIとして残す。新しいAgent主導の制作では `biim-video.ps1` とプロジェクトJSONを使い、GUIや外部LLMの画面への貼り付けを必要としない。

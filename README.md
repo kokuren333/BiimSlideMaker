@@ -26,6 +26,8 @@ Windows向けのAgent主導動画制作CLIです。PowerShell/.NETでプロジ�
 
 既定の出力先は`projects\my-video\output\final.mp4`です。各発話のフレーム、合成音声、チャンク動画は`output\final_work\`に残します。読み上げ音声はテキストと話者設定のハッシュでキャッシュします。
 
+新規プロジェクトでは、既存の `(Glass Weather).mp3` を `assets/bgm.mp3` にコピーし、BGMを既定で有効にします。`build` は音量設定 `audio.bgm_volume = 0.2` で動画の最後まで繰り返し再生します。`preview` は静止画のため音声を再生しません。差し替えは `init projects/my-video -BgmFile "C:\path\to\music.mp3"`、BGMなしは `init projects/my-video -NoBgm` を指定してください。既存プロジェクトでは `assets.bgm` に音源の相対パスを設定します（空文字で無効）。既定曲が見つからない環境では音源の指定または `-NoBgm` が必要です。
+
 ## プロジェクト形式
 
 `project.json`にHTMLスライド、ナレーション、メモ、動作、素材、画面配置を記述します。`script`は句点などで発話単位に分かれ、字幕として表示する正規表記です。太字字幕は枠内に収まるよう縮小し、必要なら折り返します。`note_top`は右枠上部1/4の見出し、`note_bottom`は下部3/4の補足欄です。どちらも左上揃えで、上段は大きい太字、下段は読みやすい本文書体を使い、各欄からはみ出ないよう縮小・折り返しし、なお収まらない場合はエラーで編集を促します。note_bottomは背景・理由・具体例などを2〜4文、目安60〜140字で説明します。読みづらい語だけをカタカナにする`tts_texts`を指定すると、字幕は変えずにAivisSpeechへの合成入力だけを上書きできます。詳細は[スキーマ](skills/biim-video/references/project-schema.md)を参照してください。

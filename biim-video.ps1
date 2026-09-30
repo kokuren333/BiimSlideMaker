@@ -6,6 +6,8 @@
     [Parameter(Position = 1, Mandatory = $true)]
     [string]$ProjectPath,
     [string]$FrameImage,
+    [string]$BgmFile,
+    [switch]$NoBgm,
     [ValidateRange(1, 100000)][int]$PreviewFrom = 1,
     [ValidateRange(1, 100000)][int]$PreviewTo = 100000
 )
@@ -208,6 +210,15 @@ function Test-Project($Project, [string]$Base) {
 }
 
 function Initialize-Project([string]$Directory) {
+    if ($NoBgm -and $BgmFile) { throw 'Choose either -NoBgm or -BgmFile' }
+    $bgmName = ''
+    $sourceBgm = if ($BgmFile) { [IO.Path]::GetFullPath($BgmFile) } else { Join-Path $PSScriptRoot '(Glass Weather).mp3' }
+    if (-not $NoBgm) {
+        if (-not (Test-Path -LiteralPath $sourceBgm -PathType Leaf)) { throw "BGM not found: $sourceBgm. Supply -BgmFile <path> or use -NoBgm." }
+        $bgmExtension = [IO.Path]::GetExtension($sourceBgm).ToLowerInvariant()
+        if ($bgmExtension -notin @('.mp3','.wav','.ogg','.flac','.m4a','.aac')) { throw 'BGM must be MP3, WAV, OGG, FLAC, M4A or AAC' }
+        $bgmName = 'bgm' + $bgmExtension
+    }
     $directory = [System.IO.Path]::GetFullPath($Directory)
     $assets = Join-Path $directory 'assets'
     $slidesDir = Join-Path $directory 'slides'
@@ -218,6 +229,7 @@ function Initialize-Project([string]$Directory) {
     if ($frameExtension -notin @('.svg','.png','.jpg','.jpeg','.bmp','.gif')) { throw 'Frame image must be SVG, PNG, JPEG, BMP or GIF' }
     $frameName = 'frame' + $frameExtension
     Copy-Item -LiteralPath $sourceFrame -Destination (Join-Path $assets $frameName) -Force
+    if ($bgmName) { Copy-Item -LiteralPath $sourceBgm -Destination (Join-Path $assets $bgmName) -Force }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'animations') -Destination (Join-Path $assets 'animations') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\fonts') -Destination (Join-Path $assets 'fonts') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\katex') -Destination (Join-Path $assets 'katex') -Recurse -Force
@@ -233,7 +245,7 @@ function Initialize-Project([string]$Directory) {
         canvas = [ordered]@{ width = 1920; height = 1080 }
         fps = 30
         output = 'output/final.mp4'
-        assets = [ordered]@{ background = ('assets/' + $frameName); animations = 'assets/animations'; bgm = '' }
+        assets = [ordered]@{ background = ('assets/' + $frameName); animations = 'assets/animations'; bgm = $(if ($bgmName) { 'assets/' + $bgmName } else { '' }) }
         voice = $script:DefaultVoice
         audio = [ordered]@{ bgm_volume = 0.2 }
         renderer = [ordered]@{ audit_slides = $true; min_text_pixels = 26; min_contrast = 3; require_diagram_description = $true }
