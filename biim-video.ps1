@@ -207,32 +207,17 @@ function Test-Project($Project, [string]$Base) {
     return $errors
 }
 
-function New-DefaultFrame([string]$Path) {
-    # Original geometric fallback; does not redistribute the locally supplied frame image.
-    $bitmap = [Drawing.Bitmap]::new(1920, 1080)
-    $graphics = [Drawing.Graphics]::FromImage($bitmap)
-    $pen = [Drawing.Pen]::new([Drawing.Color]::FromArgb(204,204,204), 8)
-    try {
-        $graphics.Clear([Drawing.Color]::FromArgb(30,30,30))
-        foreach ($rect in @(@(12,12,1448,818), @(1480,12,428,218), @(1480,250,428,580), @(304,850,1604,218))) {
-            $graphics.DrawRectangle($pen, [int]$rect[0], [int]$rect[1], [int]$rect[2], [int]$rect[3])
-        }
-        $bitmap.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
-    } finally { $pen.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
-}
-
 function Initialize-Project([string]$Directory) {
     $directory = [System.IO.Path]::GetFullPath($Directory)
     $assets = Join-Path $directory 'assets'
     $slidesDir = Join-Path $directory 'slides'
     New-Item -ItemType Directory -Path $assets,$slidesDir -Force | Out-Null
-    $localFrame = if ($FrameImage) { [IO.Path]::GetFullPath($FrameImage) } else { Join-Path $PSScriptRoot 'assets/frame-nc293888.png' }
-    if ($FrameImage -and -not (Test-Path -LiteralPath $localFrame -PathType Leaf)) { throw "Frame image not found: $localFrame" }
-    if (Test-Path -LiteralPath $localFrame -PathType Leaf) {
-        Copy-Item -LiteralPath $localFrame -Destination (Join-Path $assets 'frame.png') -Force
-    } else {
-        New-DefaultFrame (Join-Path $assets 'frame.png')
-    }
+    $sourceFrame = if ($FrameImage) { [IO.Path]::GetFullPath($FrameImage) } else { Join-Path $PSScriptRoot 'assets/frame-default.svg' }
+    if (-not (Test-Path -LiteralPath $sourceFrame -PathType Leaf)) { throw "Frame image not found: $sourceFrame" }
+    $frameExtension = [IO.Path]::GetExtension($sourceFrame).ToLowerInvariant()
+    if ($frameExtension -notin @('.svg','.png','.jpg','.jpeg','.bmp','.gif')) { throw 'Frame image must be SVG, PNG, JPEG, BMP or GIF' }
+    $frameName = 'frame' + $frameExtension
+    Copy-Item -LiteralPath $sourceFrame -Destination (Join-Path $assets $frameName) -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'animations') -Destination (Join-Path $assets 'animations') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\fonts') -Destination (Join-Path $assets 'fonts') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\katex') -Destination (Join-Path $assets 'katex') -Recurse -Force
@@ -248,7 +233,7 @@ function Initialize-Project([string]$Directory) {
         canvas = [ordered]@{ width = 1920; height = 1080 }
         fps = 30
         output = 'output/final.mp4'
-        assets = [ordered]@{ background = 'assets/frame.png'; animations = 'assets/animations'; bgm = '' }
+        assets = [ordered]@{ background = ('assets/' + $frameName); animations = 'assets/animations'; bgm = '' }
         voice = $script:DefaultVoice
         audio = [ordered]@{ bgm_volume = 0.2 }
         renderer = [ordered]@{ audit_slides = $true; min_text_pixels = 26; min_contrast = 3; require_diagram_description = $true }

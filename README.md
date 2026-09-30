@@ -32,7 +32,7 @@ Windows向けのAgent主導動画制作CLIです。PowerShell/.NETでプロジ�
 
 既定の音声は`kokuren_3rd`、speaker UUID `38d7216c-e595-4d8f-b06c-1fc376e47c0a`、スタイル「ノーマル」ID `1069147200`です。AivisSpeech APIにはスタイルIDを`speaker`として渡します。[AivisSpeech Engine公式資料](https://github.com/Aivis-Project/AivisSpeech-Engine)
 
-既定レイアウトはシンプルな矩形枠（16:9、1920×1080、30fps）です。スライドは `[16,16,1440,810]`、右上見出しは `[1498,34,388,182]`、右下補足は `[1498,274,388,532]`、字幕は `[350,870,1528,178]`、キャラは `[0,740,330,332]`。キャラは最前面に描画し、スライドへの軽い重なりを許容します。キャラと字幕の重なりは検証エラーです。
+既定レイアウトは同梱SVGの矩形枠（16:9、1920×1080、30fps）です。スライドは `[16,16,1440,810]`、右上見出しは `[1498,34,388,182]`、右下補足は `[1498,274,388,532]`、字幕は `[350,870,1528,178]`、キャラは `[0,740,330,332]`。キャラは最前面に描画し、スライドへの軽い重なりを許容します。キャラと字幕の重なりは検証エラーです。
 
 字幕は M PLUS Rounded 1c ExtraBold（800、64pxから自動調整）、赤字・黒4px/白9pxの二重フチです。見出しは Noto Sans JP 800（44px）、補足は同600（34px）。スライドも同梱のNoto Sans JPを使い、HTML/CSSでサイズ・ウェイトを編集します。フォントはすべてローカルの `@font-face` で読み込むためインストール不要です。両書体のOFLを `assets/fonts/` に保持します。KaTeXのMITライセンスも維持します。出力はH.264/CRF 18、AAC 192kbps/48kHz、`yuv420p`、MP4 faststartです。
 
@@ -58,15 +58,11 @@ HTMLスライドを2560×1440で撮影し、字幕・ノートもEdgeの2倍解�
 
 ## ローカル素材と公開範囲
 
-Biim枠には、ニコニ・コモンズの[「biimシステム枠（1920×1080）」(nc293888)](https://commons.nicovideo.jp/works/nc293888)を推奨します。本ツールの既定レイアウトは、この枠のスライド・右上ノート・右下ノート・下部字幕の位置に合わせています。[利用条件](https://commons.nicovideo.jp/works/agreement/nc293888)を確認したうえで配布元からPNGをダウンロードし、次のように指定してください。枠PNG本体はリポジトリに同梱していません。
+`init`は既定で同梱の [assets/frame-default.svg](assets/frame-default.svg) をプロジェクトの `assets/frame.svg` にコピーし、その枠に合うスライド・右上見出し・右下補足・下部字幕・左下キャラクターの配置を `project.json` に設定します。追加の枠指定やダウンロードは不要です。SVGは1920×1080のviewBoxと矩形・パスで構成し、スライド領域は透明です。座標・色をテキストで編集でき、拡大しても枠線の鮮明さを保ちます。
 
-```powershell
-.\biim-video.ps1 init projects/my-video -FrameImage "C:\path\to\nc293888-frame.png"
-```
+外部の枠を使う場合は `init projects/my-video -FrameImage "C:\path\to\frame.svg"` のように明示指定できます。PNG・SVG等の入力画像は、拡張子を保持してプロジェクトの `assets/frame.<拡張子>` にコピーされます。別形式の枠では `layout` の各 `[x,y,幅,高さ]` も調整してください。既存プロジェクトでは `assets.background` と `layout` を編集できます。
 
-`init projects/my-video -FrameImage "C:\path\to\frame.png"` で利用する枠を明示指定できます。入力画像はプロジェクトの `assets/frame.png` にそのままコピーされます。添付と同じ枠形式に合う配置が既定値で、別形式の枠では `layout` の各 `[x,y,幅,高さ]` を調整します。
-
-`init`は外部画像を必要とせず、コードでシンプルな矩形枠を生成します。利用する権利のある枠を `assets/frame-nc293888.png` に置くと、新規プロジェクトではそのローカル画像を優先します。既存プロジェクトでは `assets.background` を変更できます。提供枠のPNG、個別の制作プロジェクト（BGM・台本・動画・プレビュー等）はGit対象外です。フォントの再配布条件と出典は `assets/fonts/README.md` および各OFLを参照してください。
+提供画像、個別の制作プロジェクト（BGM・台本・動画・プレビュー等）はGit対象外です。フォントの再配布条件と出典は `assets/fonts/README.md` および各OFLを参照してください。
 
 ## Agentの制作ガイド
 
@@ -79,7 +75,10 @@ Biim枠には、ニコニ・コモンズの[「biimシステム枠（1920×1080�
 ## 共通描画の回帰テスト
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/frame-default.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/slide-quality.ps1
 ```
+
+`frame-default.ps1` は既定SVGの選択と配置、SVG・PNGの明示指定時のコピー、ブラウザ合成後の枠線と出力サイズを検証します。
 
 特定の動画プロジェクトに依存せず、新規プロジェクト作成、枠の正確なコピー、4種の正常な図、同梱KaTeX数式、文字サイズ・CSS縮小・重なり・低コントラスト・クリッピング・図の説明欠落・割合バーの誤り・分母欠落・小さな出力枠の拒否を16ケースで検証します。結果とログはGit対象外の `output/quality-test-*/` に保存します。ブラウザとPowerShell 5.1以降が必要です。音声APIやFFmpegは使用しません。

@@ -12,7 +12,7 @@ The Agent-facing CLI reads `project.json`. Author each slide as a standalone HTM
   "fps": 30,
   "output": "output/final.mp4",
   "assets": {
-    "background": "assets/frame.png",
+    "background": "assets/frame.svg",
     "animations": "assets/animations",
     "bgm": ""
   },
@@ -100,3 +100,5 @@ The default voice is kokuren_3rd, UUID `38d7216c-e595-4d8f-b06c-1fc376e47c0a`, s
 Video output remains H.264/AAC, 1920×1080 at 30 fps by default, `yuv420p`, and MP4 faststart. FFmpeg and the local AivisSpeech Engine are required for the final build; HTML slide rendering also needs Edge or Chrome. Python, pip, Node.js, and external slide apps are not required.
 
 Preview a selected range by array position: `preview projects/my-video -PreviewFrom 14 -PreviewTo 18`. Generated frame HTML beside each preview is an inspectable rendering artifact; edit project.json and slide HTML as the source of truth.
+
+Default background is the bundled editable geometric `assets/frame-default.svg`, copied as `assets/frame.svg`. `init ... -FrameImage <path>` accepts SVG, PNG, JPEG, BMP or GIF and preserves the source extension. Frame coordinates and colors are editable in SVG; layout boxes are configured separately in project.json.
