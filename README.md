@@ -40,11 +40,25 @@ HTMLスライドを2560×1440で撮影し、字幕・ノートもEdgeの2倍解�
 
 `layout.character_crop = [36,57,184,148]` は同梱GIF全フレームの可視領域を覆うクロップです。透明余白を除き、縦横比を保ってキャラボックスの下中央へ配置します。別素材に交換した場合はクロップを再設定するか削除してください。プレビューと動画は同じ配置計算を使います。
 
-`renderer.audit_slides: true` はブラウザ描画後に24px未満の文字、枠外の文字、図の領域外の文字、見出しと図の重なりを検出して停止します。新規テンプレートに設定済みです。既存プロジェクトは明示的に有効化できます。字幕・ノートのはみ出しも描画時に検出し、末尾を省略して内容を失う代わりに編集を促すエラーにします。図の意味や数値の正しさは目視でも確認してください。
+スライド検査は `preview` と `build` で既定有効（設定省略時も有効）です。`validate` は設定・ファイルの検証です。ブラウザ上で次を検出すると生成を停止し、PNGと同じ場所に `*.audit.json` を保存します。
+
+- CSSのtransform/zoomと最終スライド枠への縮小を考慮した文字サイズ。既定下限は完成1080p画面で26px。
+- 文字同士の重なり、枠外、図の領域外、overflowによるクリッピング。
+- 計算できる単色背景に対する低コントラスト（既定比3未満）。画像・グラデーション背景は目視対象。
+- 図が伝える結論の記載漏れ、比較・手順の項目不足／重なり、分数の分子・分母名の欠落。
+- 部分／全体の値と一致しない割合バー、不正な数値、画像の読み込み失敗。
+
+字幕・ノートが縮小しても収まらない場合もエラーになります。図の主張が事実として正しいか、画像内の文字、任意の図形の意味まで自動判定する機能ではありません。Agentは全スライドを完成枠内で目視し、結果と修正箇所をプロジェクトの説明に記録します。任意の図や画像については検査レポートにも目視対象を記録します。
+
+新規プロジェクトには `assets/slide-theme.css` と `slides/comparison.template.html`、`flow.template.html`、`fraction.template.html`、`proportion.template.html` を同梱します。比較・手順・分数・割合の用途に合うものをコピーし、説明文・値を編集します。図領域を `data-diagram="comparison|flow|fraction|proportion|custom"` とし、`data-message="図から伝える結論"` または表示される `.diagram-caption` を書きます。分数の `data-numerator` / `data-denominator`、割合の `data-part` / `data-total` とバー幅は検査対象です。配色・サイズ・余白は共通CSSで管理し、内容が収まらなければ縮小せず分割してください。
+
+`renderer.min_text_pixels`（1080p基準）、`min_contrast`、`require_diagram_description` をJSONで設定できます。既存プロジェクトにも検査が適用されます。カスタム図には説明を追加し、小さい文字は拡大してください。互換性調査のため検査を無効化する場合だけ `audit_slides: false` を明示し、その理由と目視確認結果を記録します。Agentの通常制作では無効化して完成扱いにしません。
 
 部分確認は `preview projects\my-video -PreviewFrom 14 -PreviewTo 18` のように指定できます（スライドの配列順、preview専用）。
 
 ## ローカル素材と公開範囲
+
+`init projects/my-video -FrameImage "C:\path\to\frame.png"` で利用する枠を明示指定できます。入力画像はプロジェクトの `assets/frame.png` にそのままコピーされます。添付と同じ枠形式に合う配置が既定値で、別形式の枠では `layout` の各 `[x,y,幅,高さ]` を調整します。
 
 `init`は外部画像を必要とせず、コードでシンプルな矩形枠を生成します。利用する権利のある枠を `assets/frame-nc293888.png` に置くと、新規プロジェクトではそのローカル画像を優先します。既存プロジェクトでは `assets.background` を変更できます。提供枠のPNG、個別の制作プロジェクト（BGM・台本・動画・プレビュー等）はGit対象外です。フォントの再配布条件と出典は `assets/fonts/README.md` および各OFLを参照してください。
 
@@ -55,3 +69,11 @@ HTMLスライドを2560×1440で撮影し、字幕・ノートもEdgeの2倍解�
 ## 旧Python GUI
 
 `movie_maker_gui.py`は既存PDF/YAMLプロジェクト向けに残しています。旧GUIを使う場合のみPythonと`requirements.txt`のライブラリが必要です。新しいAgent主導の制作にはPowerShell CLIを使ってください。
+
+## 共通描画の回帰テスト
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/slide-quality.ps1
+```
+
+特定の動画プロジェクトに依存せず、新規プロジェクト作成、枠の正確なコピー、4種の正常な図、同梱KaTeX数式、文字サイズ・CSS縮小・重なり・低コントラスト・クリッピング・図の説明欠落・割合バーの誤り・分母欠落・小さな出力枠の拒否を16ケースで検証します。結果とログはGit対象外の `output/quality-test-*/` に保存します。ブラウザとPowerShell 5.1以降が必要です。音声APIやFFmpegは使用しません。

@@ -24,6 +24,7 @@ The Agent-facing CLI reads `project.json`. Author each slide as a standalone HTM
     "engine_url": "http://127.0.0.1:10101"
   },
   "audio": { "bgm_volume": 0.2 },
+  "renderer": { "audit_slides": true, "min_text_pixels": 26, "min_contrast": 3, "require_diagram_description": true },
   "layout": {
     "slide": [16, 16, 1440, 810],
     "subtitle": [350, 870, 1528, 178],
@@ -68,7 +69,11 @@ The `init` template loads bundled KaTeX. Use `\(...\)` for inline formulas and `
 - `subtitle_color`: `#RRGGBB` fill, default `#ff3434`. `subtitle_stroke`: black inner stroke width (4px); `subtitle_outer_stroke`: white outer stroke (9px). Set both to 0 to remove strokes. Adjust caption box padding for larger strokes.
 - `layout.fonts` provides independent `slide`, `subtitle`, `notes` family names. Local Noto Sans JP and M PLUS Rounded 1c font faces are loaded directly. System font families may also be selected. Keep the fonts and both OFL files with the project.
 - Overlay text renders at 2× through Edge and downsamples. Remaining caption/note overflow is a render error; shorten content or adjust the box rather than truncating.
-- `renderer.audit_slides: true` enables browser checks for slide text below 24 CSS px, text outside the canvas/`.art` diagram region, and heading/diagram overlap. Defaults enabled for new projects; opt in for existing ones. These checks supplement semantic and visual inspection.
+- Browser audits run by default for both new and existing projects unless `renderer.audit_slides: false` is explicit. `preview` and `build` run them; `validate` only checks configuration/assets.
+- `renderer.min_text_pixels`: minimum text size after CSS transform/zoom and fitting into the final slide box, in 1080p reference pixels, default 26. `min_contrast`: minimum computed contrast on known solid backgrounds, default 3. `require_diagram_description`: require a stated conclusion for graphics, default true.
+- Audits reject text overlap, clipping, out-of-frame text, insufficient diagram items, unlabeled fraction parts, and percentage bars inconsistent with part/total. Every audited source PNG has an adjacent `.audit.json` report with issues, text metrics, and visual-review warnings.
+- Init copies shared `assets/slide-theme.css` and four `slides/*.template.html` files. Diagram regions use `data-diagram="comparison|flow|fraction|proportion|custom"`, with `data-message` or `.diagram-caption`. Mark items using `data-item`. Fractions use `data-numerator` / `data-denominator`. Proportion regions carry numeric `data-part` / `data-total` and elements `data-track` / `data-fill`; edit values and bar width together.
+- Arbitrary image text, unknown backgrounds, custom shape semantics and factual truth require visual review. Do not bypass the audit to complete normal production.
 - Keep slides to one main idea with readable type and contrast. Split dense material across slides rather than forcing it into the frame.
 
 ## Narration and notes
@@ -84,7 +89,7 @@ The default voice is kokuren_3rd, UUID `38d7216c-e595-4d8f-b06c-1fc376e47c0a`, s
 ## Commands
 
 ```powershell
-.\biim-video.ps1 init projects/my-video
+.\biim-video.ps1 init projects/my-video -FrameImage "C:\path\to\frame.png"
 .\biim-video.ps1 validate projects/my-video
 .\biim-video.ps1 preview projects/my-video
 .\biim-video.ps1 build projects/my-video

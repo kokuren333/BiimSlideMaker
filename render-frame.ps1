@@ -15,9 +15,13 @@ function Save-BrowserImage([string]$HtmlPath, [string]$Target, $Project, [int]$W
         $process = Start-Process -FilePath $browser -ArgumentList $argumentLine -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $domPath
         if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $capture)) { throw "Browser capture failed: $HtmlPath" }
         $dom = [IO.File]::ReadAllText($domPath)
+        if ($dom -match 'data-slide-audit="([^"]+)"') {
+            $report = [Net.WebUtility]::HtmlDecode($Matches[1])
+            [IO.File]::WriteAllText(($Target + '.audit.json'), $report, [Text.UTF8Encoding]::new($false))
+        }
         if ($dom -match 'data-slide-issues="([^"]+)"') { throw "Slide readability check: $([Net.WebUtility]::HtmlDecode($Matches[1])) ($HtmlPath)" }
         if ($dom -match 'data-overflow="true"') { throw "Text exceeds its frame. Edit the sentence/note in project.json. Inspect $HtmlPath" }
-        if ($Downsample -and $dom -notmatch 'data-ready="true"') { throw "Frame fonts did not finish loading: $HtmlPath" }
+        if (($Downsample -or $Project.renderer.audit_slides -ne $false) -and $dom -notmatch 'data-ready="true"') { throw "Render audit/fonts did not finish: $HtmlPath" }
         if ($Downsample) {
             $source = [Drawing.Image]::FromFile($capture)
             $bitmap = [Drawing.Bitmap]::new($Width, $Height)
@@ -52,23 +56,17 @@ function Convert-HtmlSlide([string]$Path, [string]$Target, $Project) {
     $family = if ($Project.layout.fonts.slide) { [string]$Project.layout.fonts.slide } else { 'Noto Sans JP' }
     $family = $family.Replace("'", '').Replace('<', '')
     $style = "<style>$(Get-LocalFontCss $Project.basePath) html,body{font-family:'$family','Noto Sans JP',sans-serif !important}</style>"
-    $audit = @'
-<script>document.addEventListener('DOMContentLoaded',async()=>{
-await document.fonts.ready;const issues=[];const art=document.querySelector('.art');
-const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-let t;while(t=walker.nextNode()){
-if(!t.textContent.trim()||t.parentElement.closest('script,style'))continue;
-const r=document.createRange();r.selectNodeContents(t);const rects=[...r.getClientRects()];
-if(!rects.length)continue;const size=parseFloat(getComputedStyle(t.parentElement).fontSize);
-if(size<24)issues.push('Small text '+size+'px: '+t.textContent.trim().slice(0,24));
-for(const b of rects){if(b.left<-.5||b.top<-.5||b.right>1280.5||b.bottom>720.5)issues.push('Outside slide: '+t.textContent.trim().slice(0,24));
-if(art&&art.contains(t)){const a=art.getBoundingClientRect();if(b.left<a.left-.5||b.right>a.right+.5||b.top<a.top-.5||b.bottom>a.bottom+.5)issues.push('Outside diagram: '+t.textContent.trim().slice(0,24));}}
-}
-if(art){const lead=document.querySelector('.lead');if(lead&&lead.getBoundingClientRect().bottom>art.getBoundingClientRect().top)issues.push('Heading overlaps diagram');}
-if(issues.length)document.body.dataset.slideIssues=JSON.stringify([...new Set(issues)]);
-document.body.dataset.ready='true';});</script>
-'@
-    $html = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8).Replace('</head>', $style + $(if ($Project.renderer.audit_slides) { $audit } else { '' }) + '</head>')
+    $auditEnabled = $Project.renderer.audit_slides -ne $false
+    $box = Get-Box $Project.layout 'slide' $script:DefaultLayout.slide ([int]$Project.canvas.width) ([int]$Project.canvas.height)
+    $config = [ordered]@{
+        slideScale = [math]::Min($box[2] / 1280.0, $box[3] / 720.0)
+        minTextPixels = $(if ($Project.renderer.min_text_pixels) { [double]$Project.renderer.min_text_pixels } else { 26 }) * ([int]$Project.canvas.height / 1080.0)
+        minContrast = $(if ($Project.renderer.min_contrast) { [double]$Project.renderer.min_contrast } else { 3 })
+        requireDiagramDescription = $Project.renderer.require_diagram_description -ne $false
+    }
+    $auditJs = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'slide-audit.js'), [Text.Encoding]::UTF8)
+    $audit = if ($auditEnabled) { '<script>window.biimAuditConfig=' + (ConvertTo-Json $config -Compress) + ';' + $auditJs + '</script>' } else { '' }
+    $html = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8).Replace('</head>', $style + $audit + '</head>')
     $renderPath = Join-Path (Split-Path $Path -Parent) ('.biim-render-' + [guid]::NewGuid().ToString('N') + '.html')
     try {
         [IO.File]::WriteAllText($renderPath, $html, [Text.UTF8Encoding]::new($false))

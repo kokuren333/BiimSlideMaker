@@ -5,6 +5,7 @@
 
     [Parameter(Position = 1, Mandatory = $true)]
     [string]$ProjectPath,
+    [string]$FrameImage,
     [ValidateRange(1, 100000)][int]$PreviewFrom = 1,
     [ValidateRange(1, 100000)][int]$PreviewTo = 100000
 )
@@ -107,6 +108,12 @@ function Test-Project($Project, [string]$Base) {
         character = $script:DefaultLayout.character
     }
     $layout = $Project.layout
+    if ($null -ne $Project.renderer.min_text_pixels -and ([double]$Project.renderer.min_text_pixels -lt 12 -or [double]$Project.renderer.min_text_pixels -gt 72)) {
+        $errors.Add('renderer.min_text_pixels must be between 12 and 72 (1080p reference pixels)')
+    }
+    if ($null -ne $Project.renderer.min_contrast -and ([double]$Project.renderer.min_contrast -lt 1 -or [double]$Project.renderer.min_contrast -gt 21)) {
+        $errors.Add('renderer.min_contrast must be between 1 and 21')
+    }
     foreach ($key in @('subtitle_font_size','note_top_font_size','note_font_size')) {
         if ($null -ne $layout.$key -and ([double]$layout.$key -lt 20 -or [double]$layout.$key -gt 160)) {
             $errors.Add("layout.$key must be between 20 and 160 pixels")
@@ -219,7 +226,8 @@ function Initialize-Project([string]$Directory) {
     $assets = Join-Path $directory 'assets'
     $slidesDir = Join-Path $directory 'slides'
     New-Item -ItemType Directory -Path $assets,$slidesDir -Force | Out-Null
-    $localFrame = Join-Path $PSScriptRoot 'assets/frame-nc293888.png'
+    $localFrame = if ($FrameImage) { [IO.Path]::GetFullPath($FrameImage) } else { Join-Path $PSScriptRoot 'assets/frame-nc293888.png' }
+    if ($FrameImage -and -not (Test-Path -LiteralPath $localFrame -PathType Leaf)) { throw "Frame image not found: $localFrame" }
     if (Test-Path -LiteralPath $localFrame -PathType Leaf) {
         Copy-Item -LiteralPath $localFrame -Destination (Join-Path $assets 'frame.png') -Force
     } else {
@@ -228,6 +236,11 @@ function Initialize-Project([string]$Directory) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'animations') -Destination (Join-Path $assets 'animations') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\fonts') -Destination (Join-Path $assets 'fonts') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\katex') -Destination (Join-Path $assets 'katex') -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets/slide-theme.css') -Destination $assets -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets/slide-math.js') -Destination $assets -Force
+    foreach ($template in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'assets/slide-templates') -Filter '*.html') {
+        Copy-Item -LiteralPath $template.FullName -Destination (Join-Path $slidesDir ($template.BaseName + '.template.html')) -Force
+    }
     New-SampleHtml (Join-Path $slidesDir '001.html')
     $project = [ordered]@{
         version = 1
@@ -238,7 +251,7 @@ function Initialize-Project([string]$Directory) {
         assets = [ordered]@{ background = 'assets/frame.png'; animations = 'assets/animations'; bgm = '' }
         voice = $script:DefaultVoice
         audio = [ordered]@{ bgm_volume = 0.2 }
-        renderer = [ordered]@{ audit_slides = $true }
+        renderer = [ordered]@{ audit_slides = $true; min_text_pixels = 26; min_contrast = 3; require_diagram_description = $true }
         layout = [ordered]@{
             slide = $script:DefaultLayout.slide; subtitle = $script:DefaultLayout.subtitle
             notes_top = $script:DefaultLayout.notes_top; notes_bottom = $script:DefaultLayout.notes_bottom
@@ -260,17 +273,7 @@ function Initialize-Project([string]$Directory) {
 }
 
 function New-SampleHtml([string]$Path) {
-    $html = @'
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="../assets/katex/dist/katex.min.css">
-<style>
-@font-face{font-family:"Noto Sans JP";src:url("../assets/fonts/NotoSansJP-Variable.ttf") format("truetype");font-weight:100 900}
-*{box-sizing:border-box}html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:#101827;color:#f4f7ff;font-family:"Noto Sans JP",sans-serif;font-weight:500}
-body{padding:64px 72px;position:relative}.eyebrow{color:#5bd8ef;font-size:24px;font-weight:700;letter-spacing:.12em}.title{font-size:58px;font-weight:750;line-height:1.25;margin:34px 0 22px}.lead{font-size:30px;color:#c5d4eb;font-weight:550;line-height:1.5}.rule{height:2px;background:#35516d;margin-top:40px}.math{margin-top:72px;padding:28px 36px;border:2px solid #2f536f;border-radius:20px;background:#14243a;font-size:38px;text-align:center;color:#dff9ff}
-</style><script defer src="../assets/katex/dist/katex.min.js"></script><script defer src="../assets/katex/dist/contrib/auto-render.min.js"></script>
-<script>document.addEventListener('DOMContentLoaded',()=>renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false}));</script>
-</head><body><div class="eyebrow">01 / BIIM SLIDE</div><h1 class="title">要点をひとつ、見やすく伝える</h1><div class="lead">HTMLでレイアウトし、数式や画像も自由に配置できます。</div><div class="rule"></div><div class="math">\( E = mc^2 \)</div></body></html>
-'@
+    $html = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'assets/slide-templates/comparison.html'), [Text.Encoding]::UTF8)
     [System.IO.File]::WriteAllText($Path, $html, [System.Text.UTF8Encoding]::new($false))
 }
 
