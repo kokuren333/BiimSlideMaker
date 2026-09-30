@@ -58,6 +58,12 @@ HTMLスライドを2560×1440で撮影し、字幕・ノートもEdgeの2倍解�
 
 ## ローカル素材と公開範囲
 
+Biim枠には、ニコニ・コモンズの[「biimシステム枠（1920×1080）」(nc293888)](https://commons.nicovideo.jp/works/nc293888)を推奨します。本ツールの既定レイアウトは、この枠のスライド・右上ノート・右下ノート・下部字幕の位置に合わせています。[利用条件](https://commons.nicovideo.jp/works/agreement/nc293888)を確認したうえで配布元からPNGをダウンロードし、次のように指定してください。枠PNG本体はリポジトリに同梱していません。
+
+```powershell
+.\biim-video.ps1 init projects/my-video -FrameImage "C:\path\to\nc293888-frame.png"
+```
+
 `init projects/my-video -FrameImage "C:\path\to\frame.png"` で利用する枠を明示指定できます。入力画像はプロジェクトの `assets/frame.png` にそのままコピーされます。添付と同じ枠形式に合う配置が既定値で、別形式の枠では `layout` の各 `[x,y,幅,高さ]` を調整します。
 
 `init`は外部画像を必要とせず、コードでシンプルな矩形枠を生成します。利用する権利のある枠を `assets/frame-nc293888.png` に置くと、新規プロジェクトではそのローカル画像を優先します。既存プロジェクトでは `assets.background` を変更できます。提供枠のPNG、個別の制作プロジェクト（BGM・台本・動画・プレビュー等）はGit対象外です。フォントの再配布条件と出典は `assets/fonts/README.md` および各OFLを参照してください。
