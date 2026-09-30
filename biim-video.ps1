@@ -4,7 +4,9 @@
     [string]$Command,
 
     [Parameter(Position = 1, Mandatory = $true)]
-    [string]$ProjectPath
+    [string]$ProjectPath,
+    [ValidateRange(1, 100000)][int]$PreviewFrom = 1,
+    [ValidateRange(1, 100000)][int]$PreviewTo = 100000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,11 +20,11 @@ $script:DefaultVoice = @{
     engine_url = 'http://127.0.0.1:10101'
 }
 $script:DefaultLayout = @{
-    slide = @(40, 28, 1280, 720)
-    subtitle = @(385, 847, 1465, 163)
-    notes_top = @(1413, 66, 444, 164)
-    notes_bottom = @(1413, 260, 444, 460)
-    character = @(35, 755, 300, 300)
+    slide = @(16, 16, 1440, 810)
+    subtitle = @(350, 870, 1528, 178)
+    notes_top = @(1498, 34, 388, 182)
+    notes_bottom = @(1498, 274, 388, 532)
+    character = @(0, 740, 330, 332)
 }
 
 function Resolve-ProjectFile([string]$Path) {
@@ -105,6 +107,33 @@ function Test-Project($Project, [string]$Base) {
         character = $script:DefaultLayout.character
     }
     $layout = $Project.layout
+    foreach ($key in @('subtitle_font_size','note_top_font_size','note_font_size')) {
+        if ($null -ne $layout.$key -and ([double]$layout.$key -lt 20 -or [double]$layout.$key -gt 160)) {
+            $errors.Add("layout.$key must be between 20 and 160 pixels")
+        }
+    }
+    foreach ($key in @('subtitle_stroke','subtitle_outer_stroke')) {
+        if ($null -ne $layout.$key -and ([double]$layout.$key -lt 0 -or [double]$layout.$key -gt 24)) {
+            $errors.Add("layout.$key must be between 0 and 24 pixels")
+        }
+    }
+    if ($layout.subtitle_color -and [string]$layout.subtitle_color -notmatch '^#[0-9a-fA-F]{6}$') {
+        $errors.Add('layout.subtitle_color must be a #RRGGBB color')
+    }
+    if ($layout.character_crop) {
+        $crop = @($layout.character_crop)
+        if ($crop.Count -ne 4 -or $crop[0] -lt 0 -or $crop[1] -lt 0 -or $crop[2] -le 0 -or $crop[3] -le 0) {
+            $errors.Add('layout.character_crop must be [x,y,width,height] in source animation pixels')
+        } elseif ($animations -and (Test-Path -LiteralPath (Join-Path $animations 'manifest.json'))) {
+            foreach ($action in $script:Actions) {
+                try {
+                    $im = [Drawing.Image]::FromFile((Get-ActionGif $animations $action))
+                    try { if ($crop[0]+$crop[2] -gt $im.Width -or $crop[1]+$crop[3] -gt $im.Height) { $errors.Add("character_crop exceeds $action animation") } }
+                    finally { $im.Dispose() }
+                } catch { $errors.Add($_.Exception.Message) }
+            }
+        }
+    }
     if ($width -gt 0 -and $height -gt 0) {
         foreach ($name in $defaults.Keys) {
             try {
@@ -133,10 +162,9 @@ function Test-Project($Project, [string]$Base) {
             }
         } catch { }
     }
-    if (@($slides | Where-Object { $_.html -or ([IO.Path]::GetExtension([string]$_.image).ToLowerInvariant() -in @('.html','.htm')) }).Count -gt 0) {
-        try { $null = Get-BrowserPath $Project $Base }
-        catch { $errors.Add($_.Exception.Message) }
-    }
+    # Edge also draws captions/notes for raster slides.
+    try { $null = Get-BrowserPath $Project $Base }
+    catch { $errors.Add($_.Exception.Message) }
     $slideIndex = 0
     foreach ($slide in $slides) {
         $slideIndex++
@@ -172,12 +200,31 @@ function Test-Project($Project, [string]$Base) {
     return $errors
 }
 
+function New-DefaultFrame([string]$Path) {
+    # Original geometric fallback; does not redistribute the locally supplied frame image.
+    $bitmap = [Drawing.Bitmap]::new(1920, 1080)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    $pen = [Drawing.Pen]::new([Drawing.Color]::FromArgb(204,204,204), 8)
+    try {
+        $graphics.Clear([Drawing.Color]::FromArgb(30,30,30))
+        foreach ($rect in @(@(12,12,1448,818), @(1480,12,428,218), @(1480,250,428,580), @(304,850,1604,218))) {
+            $graphics.DrawRectangle($pen, [int]$rect[0], [int]$rect[1], [int]$rect[2], [int]$rect[3])
+        }
+        $bitmap.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
+    } finally { $pen.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
+}
+
 function Initialize-Project([string]$Directory) {
     $directory = [System.IO.Path]::GetFullPath($Directory)
     $assets = Join-Path $directory 'assets'
     $slidesDir = Join-Path $directory 'slides'
     New-Item -ItemType Directory -Path $assets,$slidesDir -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'biimslide_1920x1080.png') -Destination (Join-Path $assets 'frame.png') -Force
+    $localFrame = Join-Path $PSScriptRoot 'assets/frame-nc293888.png'
+    if (Test-Path -LiteralPath $localFrame -PathType Leaf) {
+        Copy-Item -LiteralPath $localFrame -Destination (Join-Path $assets 'frame.png') -Force
+    } else {
+        New-DefaultFrame (Join-Path $assets 'frame.png')
+    }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'animations') -Destination (Join-Path $assets 'animations') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\fonts') -Destination (Join-Path $assets 'fonts') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets\katex') -Destination (Join-Path $assets 'katex') -Recurse -Force
@@ -191,12 +238,15 @@ function Initialize-Project([string]$Directory) {
         assets = [ordered]@{ background = 'assets/frame.png'; animations = 'assets/animations'; bgm = '' }
         voice = $script:DefaultVoice
         audio = [ordered]@{ bgm_volume = 0.2 }
+        renderer = [ordered]@{ audit_slides = $true }
         layout = [ordered]@{
             slide = $script:DefaultLayout.slide; subtitle = $script:DefaultLayout.subtitle
             notes_top = $script:DefaultLayout.notes_top; notes_bottom = $script:DefaultLayout.notes_bottom
             character = $script:DefaultLayout.character
-            subtitle_font_size = 54; note_font_size = 32; note_top_font_size = 38
-            fonts = [ordered]@{ slide = 'Noto Sans JP'; subtitle = 'Noto Sans JP'; notes = 'Noto Sans JP' }
+            subtitle_font_size = 64; note_font_size = 34; note_top_font_size = 44
+            subtitle_color = '#ff3434'; subtitle_stroke = 4; subtitle_outer_stroke = 9
+            character_crop = @(36, 57, 184, 148)
+            fonts = [ordered]@{ slide = 'Noto Sans JP'; subtitle = 'M PLUS Rounded 1c'; notes = 'Noto Sans JP' }
         }
         slides = @([ordered]@{
             id = 1; html = 'slides/001.html'; script = "こんにちは。`nここにナレーションを書きます。"
@@ -216,78 +266,12 @@ function New-SampleHtml([string]$Path) {
 <style>
 @font-face{font-family:"Noto Sans JP";src:url("../assets/fonts/NotoSansJP-Variable.ttf") format("truetype");font-weight:100 900}
 *{box-sizing:border-box}html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:#101827;color:#f4f7ff;font-family:"Noto Sans JP",sans-serif;font-weight:500}
-body{padding:64px 72px;position:relative}.eyebrow{color:#5bd8ef;font-size:22px;font-weight:700;letter-spacing:.12em}.title{font-size:58px;font-weight:750;line-height:1.25;margin:34px 0 22px}.lead{font-size:30px;color:#c5d4eb;font-weight:550;line-height:1.5}.rule{height:2px;background:#35516d;margin-top:40px}.math{margin-top:72px;padding:28px 36px;border:2px solid #2f536f;border-radius:20px;background:#14243a;font-size:38px;text-align:center;color:#dff9ff}
+body{padding:64px 72px;position:relative}.eyebrow{color:#5bd8ef;font-size:24px;font-weight:700;letter-spacing:.12em}.title{font-size:58px;font-weight:750;line-height:1.25;margin:34px 0 22px}.lead{font-size:30px;color:#c5d4eb;font-weight:550;line-height:1.5}.rule{height:2px;background:#35516d;margin-top:40px}.math{margin-top:72px;padding:28px 36px;border:2px solid #2f536f;border-radius:20px;background:#14243a;font-size:38px;text-align:center;color:#dff9ff}
 </style><script defer src="../assets/katex/dist/katex.min.js"></script><script defer src="../assets/katex/dist/contrib/auto-render.min.js"></script>
 <script>document.addEventListener('DOMContentLoaded',()=>renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false}));</script>
 </head><body><div class="eyebrow">01 / BIIM SLIDE</div><h1 class="title">要点をひとつ、見やすく伝える</h1><div class="lead">HTMLでレイアウトし、数式や画像も自由に配置できます。</div><div class="rule"></div><div class="math">\( E = mc^2 \)</div></body></html>
 '@
     [System.IO.File]::WriteAllText($Path, $html, [System.Text.UTF8Encoding]::new($false))
-}
-
-function Get-WrappedLines([System.Drawing.Graphics]$Graphics, [string]$Text, [System.Drawing.Font]$Font, [int]$MaxWidth) {
-    $lines = [System.Collections.Generic.List[string]]::new()
-    foreach ($paragraph in ($Text -split "`n")) {
-        $current = ''
-        foreach ($character in $paragraph.ToCharArray()) {
-            $candidate = $current + $character
-            if ($current -and $Graphics.MeasureString($candidate, $Font).Width -gt $MaxWidth) {
-                $lines.Add($current); $current = [string]$character
-            } else { $current = $candidate }
-        }
-        $lines.Add($current)
-    }
-    return $lines
-}
-
-function Get-FittingFont([System.Drawing.Graphics]$Graphics, [string]$Text, [int[]]$Box,
-                         [string]$Family, [single]$BaseSize, [bool]$Bold) {
-    $style = if ($Bold) { [System.Drawing.FontStyle]::Bold } else { [System.Drawing.FontStyle]::Regular }
-    $minSize = [math]::Max(16, [int]($BaseSize * 0.62))
-    for ($size = [int]$BaseSize; $size -ge $minSize; $size -= 2) {
-        $font = [System.Drawing.Font]::new($Family, [single]$size, $style, [System.Drawing.GraphicsUnit]::Pixel)
-        $lines = @(Get-WrappedLines $Graphics $Text $font ($Box[2] - 36))
-        $lineHeight = [math]::Max($font.GetHeight($Graphics) * 1.12, 1)
-        if ($lines.Count * $lineHeight -le ($Box[3] - 28)) { return [pscustomobject]@{ Font = $font; Lines = [string[]]$lines; LineHeight = [single]$lineHeight } }
-        $font.Dispose()
-    }
-    $font = [System.Drawing.Font]::new($Family, [single]$minSize, $style, [System.Drawing.GraphicsUnit]::Pixel)
-    $lines = @(Get-WrappedLines $Graphics $Text $font ($Box[2] - 36))
-    $lineHeight = [math]::Max($font.GetHeight($Graphics) * 1.12, 1)
-    $maxLines = [math]::Max([int][math]::Floor(($Box[3] - 28) / $lineHeight), 1)
-    if ($lines.Count -gt $maxLines) {
-        $lines = @($lines | Select-Object -First $maxLines)
-        $last = [string]$lines[$maxLines - 1]
-        while ($last.Length -gt 1 -and $Graphics.MeasureString(($last + '…'), $font).Width -gt ($Box[2] - 36)) { $last = $last.Substring(0, $last.Length - 1) }
-        $lines[$maxLines - 1] = $last + '…'
-    }
-    return [pscustomobject]@{ Font = $font; Lines = [string[]]$lines; LineHeight = [single]$lineHeight }
-}
-
-function Draw-TextBlock([System.Drawing.Graphics]$Graphics, [string]$Text, [int[]]$Box,
-                        [System.Drawing.Font]$Font, [System.Drawing.Brush]$Brush, [bool]$Center,
-                        [bool]$Bold = $false, [int]$Inset = 18) {
-    if ([string]::IsNullOrWhiteSpace($Text)) { return }
-    $x = [int]$Box[0]; $y0 = [int]$Box[1]; $width0 = [int]$Box[2]; $height0 = [int]$Box[3]
-    $inner = [int[]]::new(4); $inner[0] = $x + $Inset; $inner[1] = $y0 + $Inset
-    $inner[2] = $width0 - (2 * $Inset); $inner[3] = $height0 - (2 * $Inset)
-    $fit = Get-FittingFont $Graphics $Text $inner $Font.FontFamily.Name $Font.Size $Bold
-    $fitFont = $fit.Font; $lines = @($fit.Lines); $lineHeight = [single]$fit.LineHeight
-    $rect = [System.Drawing.RectangleF]::new($inner[0], $inner[1], $inner[2], $inner[3])
-    $y = if ($Center) { $inner[1] + [math]::Max(0, ($inner[3] - ($lines.Count * $lineHeight)) / 2) } else { $inner[1] }
-    $format = [System.Drawing.StringFormat]::new()
-    $format.FormatFlags = [System.Drawing.StringFormatFlags]::NoWrap
-    if ($Center) { $format.Alignment = [System.Drawing.StringAlignment]::Center }
-    foreach ($line in $lines) {
-        $lineRect = [System.Drawing.RectangleF]::new($rect.X, [single]$y, $rect.Width, [single]$lineHeight)
-        if ($Center) {
-            $shadow = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::Black)
-            $shadowRect = [System.Drawing.RectangleF]::new($rect.X, [single]($y + 2), $rect.Width, [single]$lineHeight)
-            $Graphics.DrawString($line, $fitFont, $shadow, $shadowRect, $format); $shadow.Dispose()
-        }
-        $Graphics.DrawString($line, $fitFont, $Brush, $lineRect, $format)
-        $y += $lineHeight
-    }
-    $format.Dispose(); $fitFont.Dispose()
 }
 
 function Get-BrowserPath($Project, [string]$Base) {
@@ -301,94 +285,6 @@ function Get-BrowserPath($Project, [string]$Base) {
     $command = Get-Command msedge,chrome -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command) { return $command.Source }
     throw 'HTML slide rendering requires Microsoft Edge or Google Chrome. Install Edge or set renderer.browser in project.json.'
-}
-
-function Convert-HtmlSlide([string]$Path, [string]$Target, $Project) {
-    $browser = Get-BrowserPath $Project $Project.basePath
-    $sourceHtml = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
-    $slideFamily = if ($Project.layout.fonts.slide) { [string]$Project.layout.fonts.slide } else { 'Noto Sans JP' }
-    $cssFamily = $slideFamily.Replace('\\','\\\\').Replace("'", "\\'")
-    $style = "<style>html,body{font-family:'$cssFamily','Noto Sans JP',sans-serif !important}</style>"
-    $renderHtml = $sourceHtml.Replace('</head>', ($style + '</head>'))
-    $renderPath = Join-Path (Split-Path -Parent $Path) ('.biim-render-' + [guid]::NewGuid().ToString('N') + '.html')
-    [System.IO.File]::WriteAllText($renderPath, $renderHtml, [System.Text.UTF8Encoding]::new($false))
-    $uri = ([System.Uri]::new([System.IO.Path]::GetFullPath($renderPath))).AbsoluteUri
-    $profile = Join-Path ([IO.Path]::GetTempPath()) ('biim-edge-' + [guid]::NewGuid().ToString('N'))
-    $arguments = @('--headless=new','--disable-gpu','--no-first-run','--hide-scrollbars','--allow-file-access-from-files',
-        '--force-device-scale-factor=1','--window-size=1280,720','--virtual-time-budget=5000','--run-all-compositor-stages-before-draw',
-        "--user-data-dir=$profile", "--screenshot=$Target", $uri)
-    try {
-        $argumentLine = ($arguments | ForEach-Object { '"' + ($_ -replace '"','\"') + '"' }) -join ' '
-        $process = Start-Process -FilePath $browser -ArgumentList $argumentLine -Wait -PassThru -WindowStyle Hidden
-        if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $Target -PathType Leaf)) { throw "Browser failed to render HTML slide: $Path" }
-    } finally {
-        if (Test-Path -LiteralPath $renderPath) { Remove-Item -LiteralPath $renderPath -Force -ErrorAction SilentlyContinue }
-        if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-}
-
-function New-VideoFrame($Project, [string]$Base, $Slide, [string]$Subtitle, [string]$Target,
-                        [bool]$IncludeCharacter = $false, [string]$CharacterAction = 'idle') {
-    $Project | Add-Member -NotePropertyName basePath -NotePropertyValue $Base -Force
-    $width = [int]$Project.canvas.width; $height = [int]$Project.canvas.height
-    $layout = $Project.layout; $scale = $height / 1080.0
-    $backgroundPath = Resolve-Asset $Base $Project.assets.background
-    $bitmap = [System.Drawing.Bitmap]::new($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $background = [System.Drawing.Image]::FromFile($backgroundPath)
-    $graphics.DrawImage($background, 0, 0, $width, $height); $background.Dispose()
-    $slidePath = if ($Slide.renderedImage) { [string]$Slide.renderedImage } else { Resolve-Asset $Base $(if ($Slide.html) { [string]$Slide.html } else { [string]$Slide.image }) }
-    if (-not $Slide.renderedImage -and [IO.Path]::GetExtension($slidePath).ToLowerInvariant() -in @('.html','.htm')) {
-        $renderedSlide = Join-Path (Split-Path -Parent $Target) ('slide_{0:D3}.png' -f [int]$Slide.id)
-        Convert-HtmlSlide $slidePath $renderedSlide $Project
-        $slidePath = $renderedSlide
-    }
-    $slideImage = [System.Drawing.Image]::FromFile($slidePath)
-    $slideBox = Get-Box $layout 'slide' @(40,28,1280,720) $width $height
-    $fit = [math]::Min($slideBox[2] / $slideImage.Width, $slideBox[3] / $slideImage.Height)
-    $drawWidth = [int][math]::Round($slideImage.Width * $fit); $drawHeight = [int][math]::Round($slideImage.Height * $fit)
-    $graphics.DrawImage($slideImage, [int]($slideBox[0] + ($slideBox[2] - $drawWidth)/2), [int]($slideBox[1] + ($slideBox[3] - $drawHeight)/2), $drawWidth, $drawHeight)
-    $slideImage.Dispose()
-    $topBox = Get-Box $layout 'notes_top' $script:DefaultLayout.notes_top $width $height
-    $bottomBox = Get-Box $layout 'notes_bottom' $script:DefaultLayout.notes_bottom $width $height
-    $subtitleBox = Get-Box $layout 'subtitle' $script:DefaultLayout.subtitle $width $height
-    $fontFile = Resolve-Asset $Base 'assets/fonts/NotoSansJP-Variable.ttf'
-    if (-not (Test-Path -LiteralPath $fontFile -PathType Leaf)) { $fontFile = Join-Path $PSScriptRoot 'assets\fonts\NotoSansJP-Variable.ttf' }
-    $privateFonts = [System.Drawing.Text.PrivateFontCollection]::new(); $privateFonts.AddFontFile($fontFile)
-    $family = $privateFonts.Families | Select-Object -First 1
-    $fontOptions = $layout.fonts
-    $subtitleFamily = Resolve-PrivateFont $privateFonts $family ([string]$fontOptions.subtitle)
-    $noteFamily = Resolve-PrivateFont $privateFonts $family ([string]$fontOptions.notes)
-    $subtitleSize = if ($layout.subtitle_font_size) { [int]$layout.subtitle_font_size } else { 54 }
-    $noteSize = if ($layout.note_font_size) { [int]$layout.note_font_size } else { 32 }
-    $topSize = if ($layout.note_top_font_size) { [int]$layout.note_top_font_size } else { [int]($noteSize * 1.18) }
-    $subtitleFont = [System.Drawing.Font]::new($subtitleFamily, [single]($subtitleSize * $scale), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $noteFont = [System.Drawing.Font]::new($noteFamily, [single]($noteSize * $scale), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-    $topFont = [System.Drawing.Font]::new($noteFamily, [single]($topSize * $scale), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $captionBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
-    $noteBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(238,244,255))
-    Draw-TextBlock $graphics $Subtitle $subtitleBox $subtitleFont $captionBrush $true $true 10
-    Draw-TextBlock $graphics ([string]$Slide.note_top) $topBox $topFont $noteBrush $false $true 18
-    Draw-TextBlock $graphics ([string]$Slide.note_bottom) $bottomBox $noteFont $noteBrush $false $false 18
-    if ($IncludeCharacter) {
-        $charBox = Get-Box $layout 'character' $script:DefaultLayout.character $width $height
-        $animation = Get-ActionGif (Resolve-Asset $Base $Project.assets.animations) $CharacterAction
-        $characterImage = [System.Drawing.Image]::FromFile($animation)
-        $fit = [math]::Min($charBox[2] / $characterImage.Width, $charBox[3] / $characterImage.Height)
-        $charWidth = [int][math]::Round($characterImage.Width * $fit); $charHeight = [int][math]::Round($characterImage.Height * $fit)
-        $graphics.DrawImage($characterImage, $charBox[0], ($charBox[1] + [int](($charBox[3] - $charHeight) / 2)), $charWidth, $charHeight)
-        $characterImage.Dispose()
-    }
-    New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
-    $bitmap.Save($Target, [System.Drawing.Imaging.ImageFormat]::Png)
-    $noteBrush.Dispose(); $captionBrush.Dispose(); $subtitleFont.Dispose(); $noteFont.Dispose(); $topFont.Dispose(); $privateFonts.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
-}
-
-function Resolve-PrivateFont([System.Drawing.Text.PrivateFontCollection]$Collection, [System.Drawing.FontFamily]$Bundled, [string]$Requested) {
-    if ([string]::IsNullOrWhiteSpace($Requested) -or $Requested -eq $Bundled.Name) { return $Bundled }
-    foreach ($candidate in $Collection.Families) { if ($candidate.Name -eq $Requested) { return $candidate } }
-    try { return [System.Drawing.FontFamily]::new($Requested) } catch { return $Bundled }
 }
 
 function Get-TextHash([string]$Value) {
@@ -456,9 +352,10 @@ function Build-Video($Project, [string]$Base) {
             Get-Narration $ttsText $audioPath $Project.voice $engineUrl
             $gif = Get-ActionGif $animationsDir $motion
             $char = Get-Box $Project.layout 'character' $script:DefaultLayout.character ([int]$Project.canvas.width) ([int]$Project.canvas.height)
+            $cropFilter = if ($Project.layout.character_crop) { $c = @($Project.layout.character_crop); "crop=$($c[2]):$($c[3]):$($c[0]):$($c[1])," } else { '' }
             Invoke-FFmpeg @('-y','-loop','1','-framerate',"$fps",'-i',$framePath,'-stream_loop','-1','-i',$gif,'-i',$audioPath,
-                '-filter_complex',"[1:v]scale=$($char[2]):$($char[3]):force_original_aspect_ratio=decrease[char];[0:v][char]overlay=$($char[0]):$($char[1]):eof_action=repeat[v]",
-                '-map','[v]','-map','2:a:0','-c:v','libx264','-preset','medium','-crf','18','-r',"$fps",'-vsync','cfr','-pix_fmt','yuv420p',
+                '-filter_complex',"[1:v]${cropFilter}scale=$($char[2]):$($char[3]):force_original_aspect_ratio=decrease:flags=lanczos[char];[0:v][char]overlay=x='$($char[0])+($($char[2])-overlay_w)/2':y='$($char[1])+$($char[3])-overlay_h':eof_action=repeat[v]",
+                '-map','[v]','-map','2:a:0','-c:v','libx264','-preset','medium','-crf','18','-r',"$fps",'-fps_mode','cfr','-pix_fmt','yuv420p',
                 '-c:a','aac','-b:a','192k','-ar','48000','-shortest','-movflags','+faststart',$segmentPath)
             $segments.Add($segmentPath)
             Write-Output "[$sequence] slide=$($slide.id) motion=$motion : $sentence"
@@ -482,12 +379,14 @@ function Build-Video($Project, [string]$Base) {
 }
 
 function Render-Preview($Project, [string]$Base) {
+    if ($PreviewFrom -gt $PreviewTo -or $PreviewFrom -gt @($Project.slides).Count) { throw 'Preview range does not include any slides' }
     $Project | Add-Member -NotePropertyName basePath -NotePropertyValue $Base -Force
     $previewDir = Resolve-Asset $Base 'output/preview'
     New-Item -ItemType Directory -Path $previewDir -Force | Out-Null
     $slideIndex = 0
     foreach ($slide in @($Project.slides)) {
         $slideIndex++
+        if ($slideIndex -lt $PreviewFrom -or $slideIndex -gt $PreviewTo) { continue }
         $slidePath = Resolve-Asset $Base $(if ($slide.html) { [string]$slide.html } else { [string]$slide.image })
         if ([IO.Path]::GetExtension($slidePath).ToLowerInvariant() -in @('.html','.htm')) {
             $rendered = Join-Path $previewDir ('slide_{0:D3}_source.png' -f $slideIndex)
@@ -504,6 +403,8 @@ function Render-Preview($Project, [string]$Base) {
         }
     }
 }
+
+. (Join-Path $PSScriptRoot 'render-frame.ps1')
 
 try {
     if ($Command -eq 'init') { Initialize-Project $ProjectPath; exit 0 }

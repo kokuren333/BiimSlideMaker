@@ -4,3 +4,7 @@ output/
 *_work/
 build/
 dist/
+# Local productions may contain third-party media and user-specific material.
+/projects/
+/assets/frame-nc293888.png
+.biim-render-*.html
